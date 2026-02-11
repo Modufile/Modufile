@@ -232,7 +232,7 @@ theme: {
     *   `login`, `signup`, `forgot-password`.
     *   Auth providers: Google, GitHub, Magic Link.
 *   **Contact & Support (`/contact`)**
-    *   *Support Form:* Subject (Dropdown: Bug, Privacy, Feature), Message.
+    *   *Support Form:* Subject (Dropdown: Bug, Privacy, Feature), Message, file attachment (optional).
     *   *Direct Contact:* `mailto:contact@modufile.com` clearly visible.
     *   *Trust:* "We usually reply within 24 hours."
 

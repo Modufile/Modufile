@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/**
+ * Modufile Global Styles
+ * Based on design.md Design Constitution
+ */
+
+:root {
+  /* Brand Colors */
+  --brand-bg: #FFFFFF;
+  --brand-primary: #3A76F0;
+  --brand-primary-hover: #2563EB;
+  --brand-primary-active: #1D4ED8;
+  --brand-accent: #6D4AFF;
+  --brand-accent-hover: #5B21B6;
+  --brand-focus-ring: rgba(58, 118, 240, 0.3);
+
+  /* Background */
+  --background-app: #FCFCFD;
+  --background-surface: #FFFFFF;
+  --background-surface-hover: #F4F4F5;
+  --background-raised: #FFFFFF;
+  --background-overlay: rgba(0, 0, 0, 0.4);
+  --background-inset: #F4F4F5;
+
+  /* Border */
+  --border-default: #E4E4E7;
+  --border-subtle: #F4F4F5;
+  --border-strong: #D4D4D8;
+  --border-interactive: #A1A1AA;
+  --border-focus: #3A76F0;
+
+  /* Text */
+  --text-primary: #18181B;
+  --text-secondary: #71717A;
+  --text-tertiary: #A1A1AA;
+  --text-inverse: #FFFFFF;
+  --text-link: #3A76F0;
+
+  /* Semantic */
+  --success-bg: #ECFDF5;
+  --success-text: #047857;
+  --success-border: #A7F3D0;
+  --warning-bg: #FFFBEB;
+  --warning-text: #B45309;
+  --warning-border: #FDE68A;
+  --error-bg: #FEF2F2;
+  --error-text: #B91C1C;
+  --error-border: #FECACA;
+  --info-bg: #EFF6FF;
+  --info-text: #1D4ED8;
+  --info-border: #BFDBFE;
+
+  /* File Status */
+  --status-processing: #3A76F0;
+  --status-ready: #10B981;
+  --status-failed: #EF4444;
+  --status-queued: #71717A;
+
+  /* File Types */
+  --file-pdf: #EF4444;
+  --file-image: #3A76F0;
+  --file-spreadsheet: #10B981;
+  --file-code: #6D4AFF;
+  --file-archive: #F59E0B;
+  --file-unknown: #71717A;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-bg: #09090B;
+    --brand-primary-hover: #60A5FA;
+    --brand-primary-active: #3B82F6;
+    --brand-accent-hover: #7C3AED;
+    --brand-focus-ring: rgba(58, 118, 240, 0.5);
+
+    --background-app: #09090B;
+    --background-surface: #18181B;
+    --background-surface-hover: #27272A;
+    --background-raised: #27272A;
+    --background-overlay: rgba(0, 0, 0, 0.6);
+    --background-inset: #09090B;
+
+    --border-default: #27272A;
+    --border-subtle: #18181B;
+    --border-strong: #3F3F46;
+    --border-interactive: #52525B;
+
+    --text-primary: #F4F4F5;
+    --text-secondary: #A1A1AA;
+    --text-tertiary: #52525B;
+    --text-link: #60A5FA;
+
+    --success-bg: #064E3B;
+    --success-text: #34D399;
+    --success-border: #059669;
+    --warning-bg: #451A03;
+    --warning-text: #FCD34D;
+    --warning-border: #D97706;
+    --error-bg: #450A0A;
+    --error-text: #F87171;
+    --error-border: #DC2626;
+    --info-bg: #172554;
+    --info-text: #60A5FA;
+    --info-border: #2563EB;
+  }
+}
+
+/* Tailwind Theme */
+@theme inline {
+  --color-background: var(--background-app);
+  --color-foreground: var(--text-primary);
+  --color-brand: var(--brand-primary);
+  --color-accent: var(--brand-accent);
+  --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', var(--font-geist-mono), monospace;
+}
+
+/* Base Styles */
+body {
+  background: var(--background-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus Ring */
+*:focus-visible {
+  outline: 2px solid var(--brand-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+}
+
+/* Scrollbar (Webkit) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-inset);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-interactive);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

@@ -1,0 +1,59 @@
+'use client';
+
+/**
+ * ToolCard Component (Layer 1: Presentation)
+ * 
+ * A card representing a single tool in the grid.
+ * Follows the design spec: subtle borders, hover lift, icons.
+ */
+
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { LucideIcon } from 'lucide-react';
+
+interface ToolCardProps {
+    title: string;
+    description: string;
+    href: string;
+    icon: LucideIcon;
+    iconColor?: string;
+}
+
+export function ToolCard({
+    title,
+    description,
+    href,
+    icon: Icon,
+    iconColor = '#3A76F0',
+}: ToolCardProps) {
+    return (
+        <Link href={href}>
+            <motion.div
+                className="
+          group flex flex-col p-5
+          bg-zinc-900 border border-zinc-800 rounded-lg
+          transition-all duration-200 ease-out
+          hover:border-zinc-700 hover:bg-zinc-900/80
+          cursor-pointer h-full
+        "
+                whileHover={{ y: -2, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                whileTap={{ scale: 0.98 }}
+            >
+                <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
+                    style={{ backgroundColor: `${iconColor}15` }}
+                >
+                    <Icon className="w-5 h-5" style={{ color: iconColor }} />
+                </div>
+
+                <h3 className="text-base font-medium text-zinc-100 mb-1 group-hover:text-white transition-colors">
+                    {title}
+                </h3>
+
+                <p className="text-sm text-zinc-500 leading-relaxed">
+                    {description}
+                </p>
+            </motion.div>
+        </Link>
+    );
+}

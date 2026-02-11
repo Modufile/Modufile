@@ -89,6 +89,7 @@ To ensure security, performance, and future-proof separation, we enforce a stric
 *   **Pro Tier:** "Unlocks" isn't about capability (since it's all client-side), but about *convenience*:
     *   Batch processing (unlimited).
     *   Saved presets/templates.
+    *   Cloud Backup (optional future feature).
 
 ## 7. SEO Strategy
 *   Individual pages per tool (e.g., `/pdf-merge-online`).
