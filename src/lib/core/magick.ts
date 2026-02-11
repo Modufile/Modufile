@@ -11,14 +11,25 @@ export async function initMagick() {
     // Checks if we are in browser
     if (typeof window === 'undefined') return;
 
-    try {
-        // In static export, we need to point to the file in /public manually
-        // because import.meta.url might resolve to a blob: or other internal path
-        const wasmLocation = '/magick.wasm';
-        await initializeImageMagick(wasmLocation);
-        isInitialized = true;
-        console.log('Magick WASM Initialized');
-    } catch (error) {
-        console.error('Failed to initialize Magick WASM:', error);
+    // Robust loading for static export:
+    // 1. Resolve correct path (handling potential base paths if any)
+    const wasmPath = '/magick.wasm';
+
+    // 2. Fetch it explicitly to get a valid Response object
+    const response = await fetch(wasmPath);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch WASM: ${response.statusText}`);
     }
+
+    // 3. Get the ArrayBuffer (safest way to pass to instantiate)
+    const wasmBytes = await response.arrayBuffer();
+
+    // 4. Initialize with the bytes
+    await initializeImageMagick(wasmBytes);
+
+    isInitialized = true;
+    console.log('Magick WASM Initialized');
+} catch (error) {
+    console.error('Failed to initialize Magick WASM:', error);
+}
 }
