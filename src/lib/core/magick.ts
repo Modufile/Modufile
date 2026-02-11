@@ -12,7 +12,9 @@ export async function initMagick() {
     if (typeof window === 'undefined') return;
 
     try {
-        const wasmLocation = new URL('@imagemagick/magick-wasm/magick.wasm', import.meta.url);
+        // In static export, we need to point to the file in /public manually
+        // because import.meta.url might resolve to a blob: or other internal path
+        const wasmLocation = '/magick.wasm';
         await initializeImageMagick(wasmLocation);
         isInitialized = true;
         console.log('Magick WASM Initialized');
