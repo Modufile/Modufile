@@ -24,7 +24,7 @@ export function ToolCard({
     description,
     href,
     icon: Icon,
-    iconColor = '#3A76F0',
+    iconColor = 'var(--brand-primary)',
 }: ToolCardProps) {
     return (
         <Link href={href}>

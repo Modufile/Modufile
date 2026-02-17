@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
+import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { toolFaqs } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
@@ -46,6 +48,15 @@ export default function ImageBatchPage() {
         }));
         setFiles(prev => [...prev, ...imageFiles]);
     }, []);
+
+    // Check for files coming from homepage dropzone
+    const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+    useEffect(() => {
+        if (source === 'homepage' && storedFiles.length > 0) {
+            handleFilesAdded(storedFiles);
+            setStoredFiles([], 'direct');
+        }
+    }, [storedFiles, source, handleFilesAdded, setStoredFiles]);
 
     const removeFile = useCallback((id: string) => {
         setFiles(prev => {
@@ -135,6 +146,7 @@ export default function ImageBatchPage() {
             description="Chain multiple editing steps together."
             parentCategory="Image Tools"
             parentHref="/image"
+            faqs={toolFaqs['image-batch']}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Operation Pipeline</h3>

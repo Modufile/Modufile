@@ -26,7 +26,7 @@
 1.  **Organize:** Merge, Split, Extract Pages, Remove Pages, Rotate, Reorder.
 2.  **Edit (Overlay Mode):**
     *   Add Text, Images, Shapes.
-    *   Whiteout/Redact content.
+    *   Whiteout/Redact content (True Redaction via simple WASM).
     *   Freehand Draw (Signatures).
     *   Fill Forms.
 3.  **Convert:** PDF to JPG/PNG, PDF to Word (Text extraction), Word to PDF.
@@ -78,7 +78,9 @@ To ensure security, performance, and future-proof separation, we enforce a stric
 *   **Rule:** The only layer that knows "who" the provider is.
 
 *   **WASM Core:**
-    *   `pdf-lib` + `fontkit`
+*   **WASM Core:**
+    *   `pdf-lib` + `fontkit` (Creation/Modification)
+    *   `mupdf` (Official WASM/JS Binding) - True Redaction
     *   `ffmpeg.wasm` (@ffmpeg/ffmpeg 0.12+)
     *   `magick-wasm` / `sharp-wasm` (experimental)
     *   `tesseract.js`

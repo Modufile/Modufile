@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Shield } from 'lucide-react';
+import { Logo } from '@/components/ui';
 
 interface FloatingActionBarProps {
     isVisible: boolean;
@@ -32,7 +33,6 @@ export function FloatingActionBar({
             <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-[#3A76F0]" />
-                    <span className="text-sm text-zinc-400">Processed locally</span>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -48,7 +48,7 @@ export function FloatingActionBar({
                     >
                         {isProcessing ? (
                             <>
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <Logo isProcessing className="w-5 h-5 text-white" />
                                 Processing...
                             </>
                         ) : (

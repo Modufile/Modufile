@@ -2,11 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
+import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { toolFaqs } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, RefreshCw } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadMultipleAsZip } from '@/lib/core/download';
+import { downloadBlob } from '@/lib/core/download';
 import { initMagick } from '@/lib/core/magick';
 import { ImageMagick, MagickFormat } from '@imagemagick/magick-wasm';
 
@@ -50,6 +52,15 @@ export default function ImageConvertPage() {
         setFiles(prev => [...prev, ...imageFiles]);
     }, []);
 
+    // Check for files coming from homepage dropzone
+    const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+    useEffect(() => {
+        if (source === 'homepage' && storedFiles.length > 0) {
+            handleFilesAdded(storedFiles);
+            setStoredFiles([], 'direct');
+        }
+    }, [storedFiles, source, handleFilesAdded, setStoredFiles]);
+
     const removeFile = useCallback((id: string) => {
         setFiles(prev => {
             const file = prev.find(f => f.id === id);
@@ -63,8 +74,6 @@ export default function ImageConvertPage() {
         setIsProcessing(true);
 
         try {
-            const outputFiles: { name: string, blob: Blob }[] = [];
-
             for (const img of files) {
                 const arrayBuffer = await img.file.arrayBuffer();
                 const bytes = new Uint8Array(arrayBuffer);
@@ -74,12 +83,12 @@ export default function ImageConvertPage() {
                     image.write(targetFormat.value, (data) => {
                         const blob = new Blob([data as any], { type: `image/${targetFormat.ext}` });
                         const newName = `${img.name.substring(0, img.name.lastIndexOf('.'))}.${targetFormat.ext}`;
-                        outputFiles.push({ name: newName, blob });
+                        downloadBlob(blob, newName);
                     });
                 });
             }
 
-            await downloadMultipleAsZip(outputFiles, `converted_images_${targetFormat.ext}`);
+            // Update status (mock)
 
             // Update status (mock)
             setFiles(prev => prev.map(f => ({ ...f, status: 'converted' })));
@@ -98,6 +107,7 @@ export default function ImageConvertPage() {
             description="Convert HEIC, TIFF, PNG, JPG, WebP and more securely in your browser."
             parentCategory="Image Tools"
             parentHref="/image"
+            faqs={toolFaqs['image-convert']}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Conversion Settings</h3>

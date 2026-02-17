@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { Dropzone } from '@/components/ui';
+import { useFileStore } from '@/stores/fileStore';
+import { useEffect } from 'react';
 
 interface PDFFile {
     id: string;
@@ -46,6 +48,17 @@ export default function PDFMergePage() {
 
         setFiles(prev => [...prev, ...pdfFiles]);
     }, []);
+
+    // Check for files coming from homepage dropzone
+    const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+    useEffect(() => {
+        if (source === 'homepage' && storedFiles.length > 0) {
+            handleFilesAdded(storedFiles);
+            // Optionally clear the source so we don't re-add on refresh, 
+            // but for now keeping it simple. We could do setStoredFiles([], 'direct').
+            setStoredFiles([], 'direct');
+        }
+    }, [storedFiles, source, handleFilesAdded, setStoredFiles]);
 
     const removeFile = useCallback((id: string) => {
         setFiles(prev => prev.filter(f => f.id !== id));
@@ -195,6 +208,22 @@ export default function PDFMergePage() {
 
                     {/* Sidebar */}
                     <div className="space-y-6">
+                        {/* Toggle Visual Editor */}
+                        {files.length > 0 && (
+                            <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+                                <h3 className="text-sm font-medium text-zinc-100 mb-2">Visual Editor</h3>
+                                <p className="text-xs text-zinc-500 mb-4">
+                                    Want to reorder specific pages inside these files?
+                                </p>
+                                <Link
+                                    href="/pdf/organize"
+                                    className="block w-full text-center px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm transition-colors"
+                                >
+                                    Open Visual Organizer
+                                </Link>
+                            </div>
+                        )}
+
                         <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg">
                             <h3 className="text-sm font-medium text-zinc-100 mb-4">Options</h3>
 

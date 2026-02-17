@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dropzone } from '@/components/ui';
+import { Dropzone, FileProcessingOverlay } from '@/components/ui';
+import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { toolFaqs } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Tag } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument } from 'pdf-lib';
@@ -43,10 +46,13 @@ export default function PDFMetadataPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [metadata, setMetadata] = useState<Metadata>(EmptyMetadata);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const uploadedFile = newFiles[0];
         if (!uploadedFile || uploadedFile.type !== 'application/pdf') return;
+
+        setIsLoading(true);
 
         try {
             const arrayBuffer = await uploadedFile.arrayBuffer();
@@ -74,8 +80,19 @@ export default function PDFMetadataPage() {
 
         } catch (error) {
             console.error('Failed to load PDF', error);
+        } finally {
+            setIsLoading(false);
         }
     }, []);
+
+    // Check for files coming from homepage dropzone
+    const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+    useEffect(() => {
+        if (source === 'homepage' && storedFiles.length > 0) {
+            handleFileAdded(storedFiles);
+            setStoredFiles([], 'direct');
+        }
+    }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
     const removeFile = useCallback(() => {
         setFile(null);
@@ -121,6 +138,7 @@ export default function PDFMetadataPage() {
             description="View and modify hidden PDF properties like Title, Author, and Keywords."
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            faqs={toolFaqs['pdf-metadata']}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Info</h3>
@@ -142,14 +160,21 @@ export default function PDFMetadataPage() {
                 </div>
             }
         >
-            {!file ? (
+            {isLoading ? (
+                <FileProcessingOverlay message="Reading metadata…" />
+            ) : !file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
                     acceptedTypes={['application/pdf']}
                     maxFiles={1}
                 />
             ) : (
-                <div className="space-y-6">
+                <motion.div
+                    className="space-y-6"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                >
                     <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
@@ -229,7 +254,7 @@ export default function PDFMetadataPage() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </motion.div>
             )}
 
             <FloatingActionBar

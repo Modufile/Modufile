@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Dropzone } from '@/components/ui';
+import { useState, useCallback, useEffect } from 'react';
+import { Dropzone, FileProcessingOverlay } from '@/components/ui';
+import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { toolFaqs } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Stamp } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
@@ -20,6 +23,7 @@ interface PDFFile {
 export default function PDFWatermarkPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Watermark State
     const [text, setText] = useState('CONFIDENTIAL');
@@ -31,6 +35,8 @@ export default function PDFWatermarkPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const uploadedFile = newFiles[0];
         if (!uploadedFile || uploadedFile.type !== 'application/pdf') return;
+
+        setIsLoading(true);
 
         try {
             const arrayBuffer = await uploadedFile.arrayBuffer();
@@ -46,8 +52,19 @@ export default function PDFWatermarkPage() {
             });
         } catch (error) {
             console.error('Failed to load PDF', error);
+        } finally {
+            setIsLoading(false);
         }
     }, []);
+
+    // Check for files coming from homepage dropzone
+    const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+    useEffect(() => {
+        if (source === 'homepage' && storedFiles.length > 0) {
+            handleFileAdded(storedFiles);
+            setStoredFiles([], 'direct');
+        }
+    }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
     const removeFile = useCallback(() => {
         setFile(null);
@@ -104,6 +121,7 @@ export default function PDFWatermarkPage() {
             description="Overlay text watermarks on your PDF pages."
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            faqs={toolFaqs['pdf-watermark']}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Watermark Settings</h3>
@@ -179,14 +197,21 @@ export default function PDFWatermarkPage() {
                 </div>
             }
         >
-            {!file ? (
+            {isLoading ? (
+                <FileProcessingOverlay message="Reading PDF…" />
+            ) : !file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
                     acceptedTypes={['application/pdf']}
                     maxFiles={1}
                 />
             ) : (
-                <div className="space-y-6">
+                <motion.div
+                    className="space-y-6"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                >
                     <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
@@ -222,7 +247,7 @@ export default function PDFWatermarkPage() {
                         </div>
                         <div className="absolute bottom-4 right-4 text-xs text-gray-400">Preview (Approximation)</div>
                     </div>
-                </div>
+                </motion.div>
             )}
 
             <FloatingActionBar

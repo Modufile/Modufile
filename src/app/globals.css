@@ -1,11 +1,45 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-primary-hover: var(--brand-primary-hover);
+  --color-brand-primary-active: var(--brand-primary-active);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-hover: var(--brand-accent-hover);
+  --color-brand-focus-ring: var(--brand-focus-ring);
+
+  --color-background-app: var(--background-app);
+  --color-background-surface: var(--background-surface);
+  --color-background-surface-hover: var(--background-surface-hover);
+  --color-background-raised: var(--background-raised);
+  --color-background-overlay: var(--background-overlay);
+  --color-background-inset: var(--background-inset);
+
+  --color-border-default: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-border-interactive: var(--border-interactive);
+  --color-border-focus: var(--border-focus);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-link: var(--text-link);
+
+  --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', var(--font-geist-mono), monospace;
+}
+
 /**
  * Modufile Global Styles
  * Based on design.md Design Constitution
  */
 
 :root {
+  color-scheme: light dark;
+
   /* Brand Colors */
   --brand-bg: #FFFFFF;
   --brand-primary: #3A76F0;
@@ -105,16 +139,6 @@
     --info-text: #60A5FA;
     --info-border: #2563EB;
   }
-}
-
-/* Tailwind Theme */
-@theme inline {
-  --color-background: var(--background-app);
-  --color-foreground: var(--text-primary);
-  --color-brand: var(--brand-primary);
-  --color-accent: var(--brand-accent);
-  --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', var(--font-geist-mono), monospace;
 }
 
 /* Base Styles */

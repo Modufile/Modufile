@@ -96,3 +96,25 @@
   - Fixed `Uint8Array` type mismatches across 10+ tool files.
   - Standardized `page.tsx` tool definitions.
 - **Current State**: Application is fully implemented and build-ready. Next step is deployment.
+
+---
+
+## Date: 2026-02-14 (Redaction & Polish)
+
+### What was done
+- **True Redaction Implemented (`mupdf` WASM)**:
+  - Integrated `mupdf` (Official JS/WASM binding) for client-side content processing.
+  - Replaced rasterization masking with true content removal (security requirement).
+  - Implemented dynamic WASM loading for performance.
+- **Project Polish**:
+  - Created `/thanks` page listing all open source libraries.
+  - Added "Libraries & Credits" link to footer.
+  - Updated loading states with branded animations.
+
+### Errors
+- **Redaction Quality**: Initial rasterization approach rejected due to quality loss. Pivot to `mupdf` succeeded.
+- **WASM Types**: Strict TypeScript issues with `Buffer`/`BlobPart` fixed securely.
+
+### Results
+- Professional-grade PDF Redaction now active.
+- Documentation updated to reflect new stack.

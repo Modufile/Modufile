@@ -2,8 +2,9 @@
 
 import { ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Settings } from 'lucide-react';
-import { FileText } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { FaqSection } from '@/components/ui/FaqSection';
+import type { FAQ } from '@/data/tool-faqs';
 
 interface ToolPageLayoutProps {
     title: string;
@@ -12,6 +13,7 @@ interface ToolPageLayoutProps {
     parentHref: string;
     children: ReactNode;
     sidebar: ReactNode;
+    faqs?: FAQ[];
 }
 
 export function ToolPageLayout({
@@ -20,7 +22,8 @@ export function ToolPageLayout({
     parentCategory,
     parentHref,
     children,
-    sidebar
+    sidebar,
+    faqs
 }: ToolPageLayoutProps) {
     return (
         <div className="min-h-screen bg-[#09090B] text-zinc-100">
@@ -35,10 +38,6 @@ export function ToolPageLayout({
                         <ChevronRight className="w-4 h-4 text-zinc-600" />
                         <span className="text-sm text-zinc-100 font-medium">{title}</span>
                     </div>
-
-                    <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                        <Settings className="w-5 h-5 text-zinc-400" />
-                    </button>
                 </div>
             </div>
 
@@ -58,6 +57,11 @@ export function ToolPageLayout({
                         {sidebar}
                     </div>
                 </div>
+
+                {/* FAQ Section */}
+                {faqs && faqs.length > 0 && (
+                    <FaqSection faqs={faqs} />
+                )}
             </div>
         </div>
     );

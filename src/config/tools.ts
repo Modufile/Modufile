@@ -17,7 +17,13 @@ import {
     Tag,
     Scaling,
     RefreshCw,
-    X
+    X,
+    Type,
+    ImagePlus,
+    EyeOff,
+    Hash,
+    Maximize,
+    PenTool,
 } from 'lucide-react';
 
 export const TOOLS = [
@@ -86,10 +92,73 @@ export const TOOLS = [
         gradient: 'from-red-500/10 to-transparent'
     },
     {
+        title: 'Organize PDF',
+        description: 'Sort, rotate, and delete pages visually.',
+        href: '/pdf/organize',
+        icon: Layers,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
         title: 'Flatten Forms',
         description: 'Make form fields uneditable.',
         href: '/pdf/flatten',
         icon: Layers,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Add Text',
+        description: 'Place text anywhere on your PDF pages.',
+        href: '/pdf/add-text',
+        icon: Type,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Add Image',
+        description: 'Overlay logos, stamps, or signatures.',
+        href: '/pdf/add-image',
+        icon: ImagePlus,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Redact PDF',
+        description: 'Black out sensitive content permanently.',
+        href: '/pdf/redact',
+        icon: EyeOff,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Page Numbers',
+        description: 'Add automatic page numbering.',
+        href: '/pdf/page-numbers',
+        icon: Hash,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Resize Pages',
+        description: 'Change page dimensions — A4, Letter, custom.',
+        href: '/pdf/resize-pages',
+        icon: Maximize,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'PDF Editor',
+        description: 'All-in-one visual PDF editor.',
+        href: '/pdf/editor',
+        icon: PenTool,
         iconColor: '#ef4444',
         category: 'PDF',
         gradient: 'from-red-500/10 to-transparent'

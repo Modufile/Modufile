@@ -73,7 +73,7 @@ export function Dropzone({
         transition-all duration-200 ease-out
         cursor-pointer
         ${isDragging
-                    ? 'border-[#3A76F0] bg-[#3A76F0]/10 scale-[1.02]'
+                    ? 'border-brand-primary bg-brand-primary/10 scale-[1.02]'
                     : 'border-zinc-700 hover:border-zinc-500 bg-zinc-900/50'
                 }
         ${className}
@@ -96,13 +96,13 @@ export function Dropzone({
             <motion.div
                 className={`
           p-4 rounded-full mb-4
-          ${isDragging ? 'bg-[#3A76F0]/20' : 'bg-zinc-800'}
+          ${isDragging ? 'bg-brand-primary/20' : 'bg-zinc-800'}
         `}
                 animate={isDragging ? { scale: [1, 1.1, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 1.5 }}
             >
                 <Upload
-                    className={`w-8 h-8 ${isDragging ? 'text-[#3A76F0]' : 'text-zinc-400'}`}
+                    className={`w-8 h-8 ${isDragging ? 'text-brand-primary' : 'text-zinc-400'}`}
                 />
             </motion.div>
 
@@ -116,7 +116,7 @@ export function Dropzone({
 
             {/* Trust Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-full">
-                <Shield className="w-4 h-4 text-[#3A76F0]" />
+                <Shield className="w-4 h-4 text-brand-primary" />
                 <span className="text-xs text-zinc-400 font-medium">
                     Private.
                 </span>

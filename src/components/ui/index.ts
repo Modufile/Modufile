@@ -4,3 +4,5 @@
 
 export { Dropzone } from './Dropzone';
 export { ToolCard } from './ToolCard';
+export { Logo } from './Logo';
+export { FileProcessingOverlay } from './FileProcessingOverlay';

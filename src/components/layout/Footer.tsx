@@ -1,20 +1,21 @@
 'use client';
 
 import Link from 'next/link';
+import { Logo } from '@/components/ui';
 
 export function Footer() {
     return (
-        <footer className="border-t border-zinc-900 bg-[#0A0A0A] py-12">
+        <footer className="border-t border-zinc-900 bg-background-app py-12">
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
                 <div>
                     <div className="flex items-center gap-2 mb-4">
-                        <div className="w-6 h-6 bg-gradient-to-br from-[#3A76F0] to-[#2D5AB8] rounded flex items-center justify-center text-white text-xs font-bold">
-                            M
+                        <div className="w-6 h-6 bg-gradient-to-br from-brand-primary to-brand-primary-active rounded flex items-center justify-center shadow-sm">
+                            <Logo className="w-3.5 h-3.5 text-white" />
                         </div>
-                        <span className="font-semibold text-zinc-300">modufile</span>
+                        <span className="font-semibold text-zinc-300">Modufile</span>
                     </div>
                     <p className="text-sm text-zinc-500">
-                        Privacy-first file manipulation toolkit. Built for privacy, and simplicity.
+                        Modufile is a privacy-first file manipulator that runs entirely in your browser. If a tool requires upload, it requires trust. Modufile removes that requirement.
                     </p>
                 </div>
                 <div>
@@ -37,6 +38,7 @@ export function Footer() {
                     <h4 className="text-zinc-100 font-medium mb-4">Project</h4>
                     <ul className="space-y-2 text-sm text-zinc-500">
                         <li><Link href="/ocr" className="hover:text-zinc-300">OCR</Link></li>
+                        <li><Link href="/thanks" className="hover:text-zinc-300">Libraries & Credits</Link></li>
                     </ul>
                 </div>
             </div>
