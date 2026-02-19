@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Trash2, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -128,7 +128,9 @@ export default function PDFRemovePagesPage() {
             description="Delete unwanted pages from your PDF document."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-remove-pages']}
+            about={toolContent['pdf-remove-pages'].about}
+            techSetup={toolContent['pdf-remove-pages'].techSetup}
+            faqs={toolContent['pdf-remove-pages'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Selection</h3>

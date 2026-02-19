@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, RefreshCw } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
@@ -107,7 +107,9 @@ export default function ImageConvertPage() {
             description="Convert HEIC, TIFF, PNG, JPG, WebP and more securely in your browser."
             parentCategory="Image Tools"
             parentHref="/image"
-            faqs={toolFaqs['image-convert']}
+            about={toolContent['image-convert'].about}
+            techSetup={toolContent['image-convert'].techSetup}
+            faqs={toolContent['image-convert'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Conversion Settings</h3>

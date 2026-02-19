@@ -4,12 +4,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Dropzone, FileProcessingOverlay, Logo } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, EyeOff, ChevronLeft, ChevronRight, Trash2, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
+import { loadMuPDF } from '@/lib/core/mupdf-loader';
 import { PDFDocument, rgb } from 'pdf-lib';
 
 interface PDFFile {
@@ -473,16 +474,15 @@ export default function RedactPage() {
         try {
             const arrayBuffer = await file.file.arrayBuffer();
 
-            // Import MuPDF dynamically from public to bypass Webpack bundling issues
-            // @ts-ignore
-            const mupdf = await import(/* webpackIgnore: true */ '/lib/mupdf/mupdf.js');
+            // Load MuPDF via singleton loader (official Artifex npm package, served from public/)
+            const mupdf = await loadMuPDF();
 
             // Also import pdfjs for coordinate conversion
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
                 pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
             }
-            const pdfjsDoc = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise; // slice to copy?
+            const pdfjsDoc = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
 
             // Create MuPDF document
             const docGeneric = mupdf.Document.openDocument(new Uint8Array(arrayBuffer), 'application/pdf');
@@ -512,38 +512,28 @@ export default function RedactPage() {
                 const unscaledViewport = pdfjsPage.getViewport({ scale: 1.0 });
 
                 for (const rect of areas) {
-                    // rect coordinates are in canvas-pixel space (matches PDF.js render viewport).
-                    // canvasWidth = viewport.width at render time, so:
-                    //   scaleFactor = canvasWidth / unscaledViewport.width
-                    // This correctly reconstructs the exact viewport used during rendering.
                     const scaleFactor = (rect.canvasWidth && unscaledViewport.width)
                         ? rect.canvasWidth / unscaledViewport.width
-                        : 1.5; // fallback to default render scale
+                        : 1.5;
 
                     const renderViewport = pdfjsPage.getViewport({ scale: scaleFactor });
 
-                    // Convert canvas-pixel coordinates to standard PDF points (bottom-left origin, Y-up).
-                    // convertToPdfPoint is the canonical way — keeps coords usable by any PDF library.
                     const p1 = renderViewport.convertToPdfPoint(rect.x, rect.y) as [number, number];
                     const p2 = renderViewport.convertToPdfPoint(rect.x + rect.width, rect.y + rect.height) as [number, number];
 
-                    // Normalize to ensure x1<x2, y1<y2 in standard PDF space
                     const pdfX1 = Math.min(p1[0], p2[0]);
                     const pdfY1 = Math.min(p1[1], p2[1]);
                     const pdfX2 = Math.max(p1[0], p2[0]);
                     const pdfY2 = Math.max(p1[1], p2[1]);
 
-                    // MuPDF uses top-left origin (Y increases downward),
-                    // but convertToPdfPoint returns bottom-left origin (Y increases upward).
-                    // Flip Y: mupdfY = pageHeight - pdfY
-                    const bounds = page.getBounds();  // [x0, y0, x1, y1] — MuPDF page rect
+                    const bounds = page.getBounds();
                     const pageHeight = bounds[3] - bounds[1];
 
                     const annotRect = [
                         pdfX1,
-                        pageHeight - pdfY2,  // top edge (smaller Y in top-left space)
+                        pageHeight - pdfY2,
                         pdfX2,
-                        pageHeight - pdfY1,  // bottom edge (larger Y in top-left space)
+                        pageHeight - pdfY1,
                     ];
 
                     const annot = page.createAnnotation('Redact');
@@ -552,11 +542,9 @@ export default function RedactPage() {
                 }
 
                 page.applyRedactions();
-
             }
 
             // Save the document
-            // 'linearize' is no longer supported. Use 'garbage=4,compress' for max optimization.
             const reducedBuffer = doc.saveToBuffer('garbage=4,compress');
             const asUint8 = reducedBuffer.asUint8Array();
 
@@ -576,7 +564,9 @@ export default function RedactPage() {
             description="Redact sensitive text and images permanently from your PDF. Works by deleting underlying text and graphics in the chosen area at the PDF content-stream level, not just covering them visually."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-redact']}
+            about={toolContent['pdf-redact'].about}
+            techSetup={toolContent['pdf-redact'].techSetup}
+            faqs={toolContent['pdf-redact'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Redaction</h3>

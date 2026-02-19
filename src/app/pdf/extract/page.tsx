@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, FolderInput } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -126,7 +126,9 @@ export default function PDFExtractPage() {
             description="Create a new PDF containing only specific pages from your document."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-extract']}
+            about={toolContent['pdf-extract'].about}
+            techSetup={toolContent['pdf-extract'].techSetup}
+            faqs={toolContent['pdf-extract'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Selection</h3>

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Dropzone, FileProcessingOverlay, Logo } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Type, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -239,7 +239,9 @@ export default function AddTextPage() {
             description="Place text annotations anywhere on your PDF pages."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-add-text']}
+            about={toolContent['pdf-add-text'].about}
+            techSetup={toolContent['pdf-add-text'].techSetup}
+            faqs={toolContent['pdf-add-text'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Text Settings</h3>

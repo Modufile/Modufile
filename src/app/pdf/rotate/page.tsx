@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, RotateCw, RotateCcw, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -100,7 +100,9 @@ export default function PDFRotatePage() {
             description="Rotate all pages of a PDF by 90°, 180°, or 270°."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-rotate']}
+            about={toolContent['pdf-rotate'].about}
+            techSetup={toolContent['pdf-rotate'].techSetup}
+            faqs={toolContent['pdf-rotate'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Rotation Options</h3>

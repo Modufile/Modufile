@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import { zipSync, strToU8 } from 'fflate';
 
 /**
  * Download a single Blob as a file
@@ -15,15 +15,17 @@ export const downloadBlob = (blob: Blob, filename: string) => {
 };
 
 /**
- * Download multiple files as a ZIP archive
+ * Download multiple files as a ZIP archive using fflate (lightweight, fast)
  */
 export const downloadMultipleAsZip = async (files: Array<{ name: string; blob: Blob }>, zipName: string) => {
-    const zip = new JSZip();
+    const zipData: Record<string, Uint8Array> = {};
 
-    files.forEach(file => {
-        zip.file(file.name, file.blob);
-    });
+    for (const file of files) {
+        const buffer = await file.blob.arrayBuffer();
+        zipData[file.name] = new Uint8Array(buffer);
+    }
 
-    const content = await zip.generateAsync({ type: 'blob' });
-    downloadBlob(content, `${zipName}.zip`);
+    const zipped = zipSync(zipData);
+    const blob = new Blob([zipped as BlobPart], { type: 'application/zip' });
+    downloadBlob(blob, `${zipName}.zip`);
 };

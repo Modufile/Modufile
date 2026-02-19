@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { ImageDown, X, Zap } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
@@ -139,7 +139,9 @@ export default function ImageCompressPage() {
             description="Reduce file size while maintaining quality. Local, secure, and fast."
             parentCategory="Image Tools"
             parentHref="/image"
-            faqs={toolFaqs['image-compress']}
+            about={toolContent['image-compress'].about}
+            techSetup={toolContent['image-compress'].techSetup}
+            faqs={toolContent['image-compress'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Compression Settings</h3>

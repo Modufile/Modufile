@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Stamp } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -121,7 +121,9 @@ export default function PDFWatermarkPage() {
             description="Overlay text watermarks on your PDF pages."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-watermark']}
+            about={toolContent['pdf-watermark'].about}
+            techSetup={toolContent['pdf-watermark'].techSetup}
+            faqs={toolContent['pdf-watermark'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Watermark Settings</h3>

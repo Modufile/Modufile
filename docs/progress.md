@@ -118,3 +118,28 @@
 ### Results
 - Professional-grade PDF Redaction now active.
 - Documentation updated to reflect new stack.
+
+---
+
+## Date: 2026-02-18 (Phase 2: Advanced PDF Infrastructure)
+
+### What was done
+- **WASM Pipeline:** Migrated from manual `public/lib/mupdf/` to official `mupdf` npm package. Created copy scripts, configured `next.config.ts` for WASM + COOP/COEP headers.
+- **Dependency Migration:** Replaced `jszip` with `fflate` (~92% smaller). Updated `download.ts` and `/thanks` page.
+- **Redact Tool Migration:** Created `mupdf-loader.ts` singleton, replaced manual import in `redact/page.tsx` with `loadMuPDF()`.
+- **Core Library (8 modules):** `worker-pool.ts`, `progress-bus.ts`, `pdf-engine.ts`, `pdf-password.ts`, `opfs-staging.ts`, `predictive-loader.ts`, `page-render-cache.ts`, `streaming-download.ts`.
+- **React Hooks (3):** `usePdfWorker`, `useFileStaging`, `useOutputFilename`.
+- **Web Workers (6):** `pdf-core` (full), `pdf-compress`/`ocr`/`office`/`office-zeta`/`image-optimize` (stubs).
+- **Service Worker:** WASM caching (`public/sw.js`), registration utility, CDN preconnect hints.
+- **Device Store:** Zustand store for memory detection and capability flags.
+- **UI:** `PasswordPrompt` modal with strength indicator and dual-mode (unlock/set).
+- **Bootstrap:** `ClientBootstrap.tsx` in `layout.tsx` initializes SW, device detection, MuPDF prefetch.
+
+### Errors
+- **TypeScript:** Fixed `Uint8Array→BlobPart` casting issues (TS5+ strict mode).
+- **Worker Types:** Created `workers.d.ts` for `DedicatedWorkerGlobalScope` (DOM/WebWorker lib conflict).
+
+### Results
+- **24 new files** created, 4 existing files modified.
+- `npx tsc --noEmit` passes with **0 errors**.
+- Full infrastructure ready for advanced PDF feature development.

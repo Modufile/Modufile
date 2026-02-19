@@ -52,6 +52,7 @@ export const viewport: Viewport = {
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { GlobalNotices } from "@/components/ui/GlobalNotices";
+import { ClientBootstrap } from "@/components/ClientBootstrap";
 
 export default function RootLayout({
   children,
@@ -60,13 +61,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Resource hints for WASM engines loaded from CDNs */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://unpkg.com" crossOrigin="anonymous" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background-app`}
         suppressHydrationWarning
       >
+        <ClientBootstrap />
         <GlobalNotices />
         <Header />
-        <main className="min-h-screen pt-16">
+        <main className="min-h-screen pt-14">
           {children}
         </main>
         <Footer />

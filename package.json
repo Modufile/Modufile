@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "copy:wasm": "node -e \"const fs=require('fs');const p=require('path');['mupdf.js','mupdf-wasm.js','mupdf-wasm.wasm'].forEach(f=>{const src=p.join('node_modules','mupdf','dist',f);const dst=p.join('public',f);if(fs.existsSync(src)){fs.copyFileSync(src,dst);console.log('Copied',f,'to public/')}else{console.warn(f,'not found at',src)}})\"",
+    "predev": "npm run copy:wasm",
     "dev": "next dev",
+    "prebuild": "npm run copy:wasm",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -18,18 +21,21 @@
     "@imagemagick/magick-wasm": "^0.0.38",
     "@supabase/supabase-js": "^2.95.3",
     "clsx": "^2.1.1",
+    "docx": "^9.5.3",
+    "fflate": "^0.8.2",
     "framer-motion": "^12.33.0",
     "idb": "^8.0.3",
-    "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "mupdf": "^1.27.0",
     "next": "16.1.6",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.4.120",
+    "pptxgenjs": "^4.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
     "tesseract.js": "^7.0.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
@@ -42,5 +48,11 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "browserslist": [
+    "last 2 versions",
+    "not dead",
+    "> 0.2%",
+    "Firefox ESR"
+  ]
 }

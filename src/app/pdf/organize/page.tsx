@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useFileStore } from '@/stores/fileStore';
 import { Dropzone } from '@/components/ui';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { PDFVisualEditor } from '@/components/pdf/PDFVisualEditor';
 
 export default function PDFOrganizePage() {
@@ -31,7 +31,9 @@ export default function PDFOrganizePage() {
             description="Rearrange, rotate, and delete pages from your PDF documents."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-organize']}
+            about={toolContent['pdf-organize'].about}
+            techSetup={toolContent['pdf-organize'].techSetup}
+            faqs={toolContent['pdf-organize'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-4">
                     <h3 className="text-sm font-medium text-zinc-100">Instructions</h3>

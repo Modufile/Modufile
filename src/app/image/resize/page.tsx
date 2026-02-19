@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, Scaling } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
@@ -160,7 +160,9 @@ export default function ImageResizePage() {
             description="Change dimensions or crop your images in bulk."
             parentCategory="Image Tools"
             parentHref="/image"
-            faqs={toolFaqs['image-resize']}
+            about={toolContent['image-resize'].about}
+            techSetup={toolContent['image-resize'].techSetup}
+            faqs={toolContent['image-resize'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Settings</h3>

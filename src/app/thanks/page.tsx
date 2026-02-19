@@ -34,7 +34,7 @@ const libraries: Library[] = [
     // Utilities
     { name: 'Zustand', description: 'Small, fast and scalable state-management', url: 'https://zustand-demo.pmnd.rs', icon: <Database className="w-4 h-4" /> },
     { name: 'IDB', description: 'IndexedDB, but with promises', url: 'https://github.com/jakearchibald/idb', icon: <Database className="w-4 h-4" /> },
-    { name: 'JSZip', description: 'Create, read and edit .zip files', url: 'https://stuk.github.io/jszip/', icon: <Box className="w-4 h-4" /> },
+    { name: 'fflate', description: 'High performance (de)compression in pure JS', url: 'https://github.com/101arrowz/fflate', icon: <Box className="w-4 h-4" /> },
 ];
 
 export default function ThanksPage() {

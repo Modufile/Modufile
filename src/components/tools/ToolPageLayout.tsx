@@ -2,9 +2,9 @@
 
 import { ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Info, Cpu } from 'lucide-react';
 import { FaqSection } from '@/components/ui/FaqSection';
-import type { FAQ } from '@/data/tool-faqs';
+import type { FAQ, TechSetup } from '@/data/tool-faqs';
 
 interface ToolPageLayoutProps {
     title: string;
@@ -13,6 +13,8 @@ interface ToolPageLayoutProps {
     parentHref: string;
     children: ReactNode;
     sidebar: ReactNode;
+    about?: string;
+    techSetup?: TechSetup[];
     faqs?: FAQ[];
 }
 
@@ -23,6 +25,8 @@ export function ToolPageLayout({
     parentHref,
     children,
     sidebar,
+    about,
+    techSetup,
     faqs
 }: ToolPageLayoutProps) {
     return (
@@ -58,6 +62,37 @@ export function ToolPageLayout({
                     </div>
                 </div>
 
+                {/* About Section */}
+                {about && (
+                    <section className="mt-16 border-t border-zinc-800 pt-12">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Info className="w-5 h-5 text-[#3A76F0]" />
+                            <h2 className="text-lg font-semibold text-zinc-100">About {title}</h2>
+                        </div>
+                        <p className="text-zinc-400 leading-relaxed max-w-3xl">{about}</p>
+                    </section>
+                )}
+
+                {/* Tech Stack Section */}
+                {techSetup && techSetup.length > 0 && (
+                    <section className={about ? 'mt-10 pt-10' : 'mt-16 border-t border-zinc-800 pt-12'}>
+                        <div className="flex items-center gap-2 mb-6">
+                            <Cpu className="w-5 h-5 text-[#3A76F0]" />
+                            <h2 className="text-lg font-semibold text-zinc-100">Tech Stack</h2>
+                        </div>
+                        <div className="space-y-3 max-w-3xl">
+                            {techSetup.map((tech, i) => (
+                                <div key={i} className="flex items-start gap-3">
+                                    <span className="shrink-0 mt-0.5 px-2.5 py-1 bg-zinc-800 border border-zinc-700 rounded-md text-xs font-mono text-[#3A76F0]">
+                                        {tech.library}
+                                    </span>
+                                    <span className="text-sm text-zinc-400">{tech.purpose}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 {/* FAQ Section */}
                 {faqs && faqs.length > 0 && (
                     <FaqSection faqs={faqs} />
@@ -66,3 +101,4 @@ export function ToolPageLayout({
         </div>
     );
 }
+

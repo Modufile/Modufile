@@ -24,6 +24,17 @@ import {
     Hash,
     Maximize,
     PenTool,
+    Minimize2,
+    Unlock,
+    Shield,
+    Wrench,
+    Archive,
+    Camera,
+    FileType2,
+    Table,
+    Presentation,
+    FileInput,
+    ScanText,
 } from 'lucide-react';
 
 export const TOOLS = [
@@ -164,6 +175,106 @@ export const TOOLS = [
         gradient: 'from-red-500/10 to-transparent'
     },
 
+    {
+        title: 'Compress PDF',
+        description: 'Reduce file size while maintaining quality.',
+        href: '/pdf/compress',
+        icon: Minimize2,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Unlock PDF',
+        description: 'Remove passwords and encryption.',
+        href: '/pdf/unlock',
+        icon: Unlock,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Protect PDF',
+        description: 'Encrypt your PDF with a password.',
+        href: '/pdf/protect',
+        icon: Shield,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Repair PDF',
+        description: 'Fix corrupt or damaged PDF files.',
+        href: '/pdf/repair',
+        icon: Wrench,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'PDF/A',
+        description: 'Convert to ISO-standard PDF/A format.',
+        href: '/pdf/pdfa',
+        icon: Archive,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Scan to PDF',
+        description: 'Capture images and create a PDF.',
+        href: '/pdf/scan',
+        icon: Camera,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'PDF to Word',
+        description: 'Convert PDF to editable Word doc.',
+        href: '/pdf/pdf-to-word',
+        icon: FileType2,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'PDF to Excel',
+        description: 'Extract tables to Excel spreadsheets.',
+        href: '/pdf/pdf-to-excel',
+        icon: Table,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'PDF to PowerPoint',
+        description: 'Convert PDF slides to PowerPoint.',
+        href: '/pdf/pdf-to-ppt',
+        icon: Presentation,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'Office to PDF',
+        description: 'Convert Word, Excel, PPT to PDF.',
+        href: '/pdf/office-to-pdf',
+        icon: FileInput,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+    {
+        title: 'OCR PDF',
+        description: 'Make scanned PDFs searchable.',
+        href: '/pdf/ocr',
+        icon: ScanText,
+        iconColor: '#ef4444',
+        category: 'PDF',
+        gradient: 'from-red-500/10 to-transparent'
+    },
+
     // Image Tools
     {
         title: 'Compress Image',
@@ -202,14 +313,24 @@ export const TOOLS = [
         gradient: 'from-blue-500/10 to-transparent'
     },
 
-    // OCR
+    // OCR Tools
     {
-        title: 'OCR',
-        description: 'Extract text from scanned images.',
+        title: 'Image to Text',
+        description: 'Extract text from images.',
         href: '/ocr',
-        icon: Eye,
+        icon: ScanText,
+        iconColor: '#a855f7',
+        category: 'OCR',
+        gradient: 'from-purple-500/10 to-transparent'
+    },
+    {
+        title: 'PDF OCR',
+        description: 'Make scanned PDFs searchable.',
+        href: '/pdf/ocr',
+        icon: FileText,
         iconColor: '#a855f7',
         category: 'OCR',
         gradient: 'from-purple-500/10 to-transparent'
     },
 ];
+

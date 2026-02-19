@@ -22,8 +22,8 @@
 "use strict";
 import libmupdf_wasm from "./mupdf-wasm.js";
 var node_fs = null;
-// if (typeof process !== "undefined" && process.versions && process.versions.node)
-// 	node_fs = await import("node:fs");
+if (typeof process !== "undefined" && process.versions && process.versions.node)
+	node_fs = await import("node:fs");
 const libmupdf = await libmupdf_wasm(globalThis["$libmupdf_wasm_Module"]);
 libmupdf._wasm_init_context();
 function Malloc(size) {

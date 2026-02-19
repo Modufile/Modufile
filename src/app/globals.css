@@ -141,13 +141,37 @@
   }
 }
 
-/* Base Styles */
+/* Base Styles — hardcoded fallbacks for older browsers that cannot resolve CSS variables */
+html {
+  background-color: #FCFCFD;
+  color: #18181B;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    background-color: #09090B;
+    color: #F4F4F5;
+  }
+}
+
 body {
-  background: var(--background-app);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
+  background: #FCFCFD;
+  background: var(--background-app, #FCFCFD);
+  color: #18181B;
+  color: var(--text-primary, #18181B);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans, 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #09090B;
+    background: var(--background-app, #09090B);
+    color: #F4F4F5;
+    color: var(--text-primary, #F4F4F5);
+  }
 }
 
 /* Focus Ring */

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
-import { toolFaqs } from '@/data/tool-faqs';
+import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, Hash } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -154,7 +154,9 @@ export default function PageNumbersPage() {
             description="Stamp page numbers on every page of your PDF document."
             parentCategory="PDF Tools"
             parentHref="/pdf"
-            faqs={toolFaqs['pdf-page-numbers']}
+            about={toolContent['pdf-page-numbers'].about}
+            techSetup={toolContent['pdf-page-numbers'].techSetup}
+            faqs={toolContent['pdf-page-numbers'].faqs}
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Numbering Options</h3>
