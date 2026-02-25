@@ -52,3 +52,4 @@ node_modules/
 # Reference (inspiration, not part of the project)
 /reference/
 /local_assets/
+/local_assets/*
