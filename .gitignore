@@ -48,5 +48,7 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 
+
 # Reference (inspiration, not part of the project)
 /reference/
+/local_assets/
