@@ -13,8 +13,7 @@ export type WorkerType =
     | 'pdf-core'       // MuPDF: render, redact, repair, encrypt
     | 'pdf-compress'   // Ghostscript
     | 'ocr'            // Tesseract.js
-    | 'office'         // PDF → Office (docx/xlsx)
-    | 'office-zeta'    // Office → PDF (ZetaJS)
+    | 'office'         // Office → PDF (docx/xlsx/pptx libs)
     | 'image-optimize'; // Canvas + Squoosh
 
 interface QueuedTask {
@@ -30,25 +29,14 @@ interface WorkerEntry {
     busy: boolean;
 }
 
-/**
- * Worker script paths — mapped to src/workers/*.worker.ts
- * These are compiled separately and loaded via `new Worker(url)`.
- */
-const WORKER_SCRIPTS: Record<WorkerType, string> = {
-    'pdf-core': '/workers/pdf-core.worker.js',
-    'pdf-compress': '/workers/pdf-compress.worker.js',
-    'ocr': '/workers/ocr.worker.js',
-    'office': '/workers/office.worker.js',
-    'office-zeta': '/workers/office-zeta.worker.js',
-    'image-optimize': '/workers/image-optimize.worker.js',
-};
+// Webpack requires static string literals for new Worker(new URL(...)) to correctly bundle workers.
+// The mapping is now handled directly inside createWorker.
 
 const MAX_CONCURRENCY: Record<WorkerType, number> = {
     'pdf-core': 2,
     'pdf-compress': 1,     // Ghostscript is memory-heavy
     'ocr': 2,
     'office': 1,
-    'office-zeta': 1,      // ZetaJS is very heavy
     'image-optimize': 2,
 };
 
@@ -104,6 +92,22 @@ export class WorkerPool {
     }
 
     /**
+     * Pre-instantiate a worker AND trigger its WASM/engine initialization.
+     * This sends a 'preload' message so the worker downloads and compiles
+     * its WASM binary during idle time, before the user needs it.
+     */
+    preloadWorker(type: WorkerType): void {
+        this.ensureWorker(type);
+        const pool = this.pools.get(type);
+        if (pool && pool.length > 0) {
+            const entry = pool[0];
+            if (!entry.busy) {
+                entry.worker.postMessage({ type: 'preload' });
+            }
+        }
+    }
+
+    /**
      * Terminate all workers of a given type (for cleanup).
      */
     terminateAll(type?: WorkerType): void {
@@ -136,7 +140,27 @@ export class WorkerPool {
     }
 
     private createWorker(type: WorkerType): WorkerEntry {
-        const worker = new Worker(WORKER_SCRIPTS[type], { type: 'module' });
+        let worker: Worker;
+        // Next.js (Webpack 5) requires precise static paths for the import.meta.url magic to work
+        switch (type) {
+            case 'pdf-core':
+                worker = new Worker(new URL('../workers/pdf-core.worker.ts', import.meta.url), { type: 'module' });
+                break;
+            case 'pdf-compress':
+                worker = new Worker(new URL('../workers/pdf-compress.worker.ts', import.meta.url), { type: 'module' });
+                break;
+            case 'ocr':
+                worker = new Worker(new URL('../workers/ocr.worker.ts', import.meta.url), { type: 'module' });
+                break;
+            case 'office':
+                worker = new Worker(new URL('../workers/office.worker.ts', import.meta.url), { type: 'module' });
+                break;
+            case 'image-optimize':
+                worker = new Worker(new URL('../workers/image-optimize.worker.ts', import.meta.url), { type: 'module' });
+                break;
+            default:
+                throw new Error(`Unsupported worker type: ${type}`);
+        }
         return { worker, busy: false };
     }
 

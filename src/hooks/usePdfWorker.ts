@@ -25,6 +25,8 @@ interface UsePdfWorkerOptions {
     workerType?: WorkerType;
     /** Called on each progress update. */
     onProgress?: (event: ProgressEvent) => void;
+    /** If true, preload the worker's WASM engine on mount. Defaults to true. */
+    preload?: boolean;
 }
 
 interface UsePdfWorkerReturn<T = unknown> {
@@ -39,7 +41,7 @@ interface UsePdfWorkerReturn<T = unknown> {
 export function usePdfWorker<T = unknown>(
     options: UsePdfWorkerOptions = {},
 ): UsePdfWorkerReturn<T> {
-    const { workerType = 'pdf-core', onProgress } = options;
+    const { workerType = 'pdf-core', onProgress, preload = true } = options;
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -48,6 +50,19 @@ export function usePdfWorker<T = unknown>(
 
     const operationIdRef = useRef<string | null>(null);
     const unsubRef = useRef<(() => void) | null>(null);
+
+    // Preload worker WASM on mount so engine is ready when the user needs it
+    useEffect(() => {
+        if (!preload) return;
+        const pool = WorkerPool.getInstance();
+        if ('requestIdleCallback' in window) {
+            const id = requestIdleCallback(() => pool.preloadWorker(workerType), { timeout: 5000 });
+            return () => cancelIdleCallback(id);
+        } else {
+            const timer = setTimeout(() => pool.preloadWorker(workerType), 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [workerType, preload]);
 
     // Clean up progress listener on unmount
     useEffect(() => {

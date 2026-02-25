@@ -10,7 +10,7 @@ import { FileText, X, FileOutput, AlertTriangle, AlertCircle } from 'lucide-reac
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
-import { loadMuPDF } from '@/lib/core/mupdf-loader';
+import { loadPyMuPDF, preloadPyMuPDF } from '@/lib/pymupdf-loader';
 
 interface PDFFile {
     id: string;
@@ -22,18 +22,23 @@ interface PDFFile {
 
 export default function PDFToWordPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<Blob | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [stage, setStage] = useState('');
     const [error, setError] = useState<string | null>(null);
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
+    // Preload PyMuPDF engine on page mount
+    useEffect(() => {
+        preloadPyMuPDF();
+    }, []);
+
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
         setResult(null);
+        setError(null);
         try {
             const { PDFDocument } = await import('pdf-lib');
             const buf = await f.arrayBuffer();
@@ -41,8 +46,6 @@ export default function PDFToWordPage() {
             setFile({ id: crypto.randomUUID(), file: f, name: f.name, size: f.size, pageCount: doc.getPageCount() });
         } catch (err) {
             console.error('Failed to load PDF', err);
-        } finally {
-            setIsLoading(false);
         }
     }, []);
 
@@ -56,75 +59,20 @@ export default function PDFToWordPage() {
     const handleConvert = useCallback(async () => {
         if (!file) return;
         setIsProcessing(true);
+        setStage('Loading engine...');
         setError(null);
+
         try {
-            const mupdf = await loadMuPDF();
-            const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
-            const pageCount = doc.countPages();
+            const pymupdf = await loadPyMuPDF();
 
-            const paragraphs: { text: string; fontSize: number; bold?: boolean }[] = [];
+            setStage('Converting to Word...');
+            const docxBlob: Blob = await pymupdf.pdfToDocx(file.file);
 
-            for (let i = 0; i < pageCount; i++) {
-                try {
-                    const page = doc.loadPage(i);
-                    // "preserve-spans" is required for font info in JSON output
-                    const stext = page.toStructuredText('preserve-spans');
-                    const json = stext.asJSON();
-                    const data = JSON.parse(json);
-
-                    if (data.blocks) {
-                        for (const block of data.blocks) {
-                            // Skip image blocks
-                            if (block.type === 'image') continue;
-                            if (block.lines) {
-                                for (const line of block.lines) {
-                                    // MuPDF asJSON() schema: line.text is the text string,
-                                    // line.font.size is the font size, line.font.weight/style for formatting
-                                    const lineText = line.text || '';
-                                    const fontSize = line.font?.size || 12;
-                                    const isBold = line.font?.weight === 'bold';
-                                    if (lineText.trim()) {
-                                        paragraphs.push({ text: lineText.trim(), fontSize, bold: isBold });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    stext.destroy();
-                    page.destroy();
-                } catch (pageErr) {
-                    console.warn(`Failed to extract text from page ${i + 1}:`, pageErr);
-                }
-            }
-
-            doc.destroy();
-
-            // Fallback if no text extracted
-            if (paragraphs.length === 0) {
-                paragraphs.push({ text: '[No text content found in PDF. The document might be a scanned image — try the OCR tool instead.]', fontSize: 12 });
-            }
-
-            const docxModule = await import('docx');
-            const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docxModule;
-            const avgSize = paragraphs.reduce((s, p) => s + p.fontSize, 0) / (paragraphs.length || 1);
-
-            const children = paragraphs.map(p => {
-                const isHeading = p.fontSize > avgSize * 1.3;
-                return new Paragraph({
-                    heading: isHeading ? HeadingLevel.HEADING_1 : undefined,
-                    children: [
-                        new TextRun({ text: p.text, size: Math.round(p.fontSize * 2), bold: isHeading || p.bold }),
-                    ],
-                });
-            });
-
-            const docx = new Document({ sections: [{ children }] });
-            const docxBlob = await Packer.toBlob(docx);
             setResult(docxBlob);
-        } catch (err) {
+            setStage('');
+        } catch (err: any) {
             console.error('PDF to Word conversion failed:', err);
-            setError(err instanceof Error ? err.message : 'Conversion failed. Please try again.');
+            setError(err.message || 'Conversion failed');
         } finally {
             setIsProcessing(false);
         }
@@ -141,7 +89,7 @@ export default function PDFToWordPage() {
     return (
         <ToolPageLayout
             title="PDF to Word"
-            description="Convert your PDF documents to editable Word files"
+            description="Convert your PDF documents to editable Word files with high quality"
             parentCategory="PDF Tools"
             parentHref="/pdf"
             sidebar={
@@ -149,15 +97,20 @@ export default function PDFToWordPage() {
                     <div className="bg-amber-500/5 border border-amber-800/30 rounded-xl p-4">
                         <div className="flex gap-2 mb-2">
                             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-300/80">Works best with text-heavy PDFs. Complex layouts, tables, and scanned documents may not convert perfectly.</p>
+                            <p className="text-xs text-amber-300/80">
+                                This tool uses the <strong>PyMuPDF engine</strong> for high-fidelity conversion.
+                                It handles tables, images, and complex layouts well.
+                                <br /><br />
+                                <em>Note: The first time you use this, it may take a few seconds to load the engine.</em>
+                            </p>
                         </div>
                     </div>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
                         <h3 className="font-medium text-sm text-zinc-100 mb-3">Output details</h3>
                         <ul className="space-y-2 text-sm text-zinc-400">
                             <li>📄 Standard .docx format</li>
-                            <li>🔤 Text with basic formatting</li>
-                            <li>📏 Heading detection from font sizes</li>
+                            <li>🖼️ Preserves images & tables</li>
+                            <li>📏 Retains page layout</li>
                         </ul>
                     </div>
                 </div>
@@ -166,9 +119,7 @@ export default function PDFToWordPage() {
             techSetup={content?.techSetup}
             faqs={content?.faqs}
         >
-            {isLoading ? (
-                <FileProcessingOverlay message="Reading PDF…" />
-            ) : !file ? (
+            {!file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
                     acceptedTypes={['application/pdf']}
@@ -193,7 +144,12 @@ export default function PDFToWordPage() {
                         </div>
                     </motion.div>
 
-                    {isProcessing && <FileProcessingOverlay message="Converting to Word…" />}
+                    {isProcessing && (
+                        <FileProcessingOverlay
+                            message={stage || 'Converting...'}
+                            subMessage={stage === 'Loading engine...' ? 'Downloading components (first time only)' : undefined}
+                        />
+                    )}
 
                     {error && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}

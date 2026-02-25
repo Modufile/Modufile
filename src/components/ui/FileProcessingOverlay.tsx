@@ -5,10 +5,12 @@ import { Logo } from './Logo';
 
 interface FileProcessingOverlayProps {
     message?: string;
+    subMessage?: string;
 }
 
 export function FileProcessingOverlay({
     message = 'Processing your file…',
+    subMessage,
 }: FileProcessingOverlayProps) {
     return (
         <motion.div
@@ -44,8 +46,19 @@ export function FileProcessingOverlay({
                 {message}
             </motion.p>
 
+            {subMessage && (
+                <motion.p
+                    className="text-xs text-zinc-400 mt-1"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                >
+                    {subMessage}
+                </motion.p>
+            )}
+
             <motion.p
-                className="text-xs text-zinc-500 mt-2"
+                className="text-xs text-zinc-500 mt-4"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.3 }}

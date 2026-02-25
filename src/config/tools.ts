@@ -32,7 +32,6 @@ import {
     Camera,
     FileType2,
     Table,
-    Presentation,
     FileInput,
     ScanText,
 } from 'lucide-react';
@@ -243,15 +242,6 @@ export const TOOLS = [
         description: 'Extract tables to Excel spreadsheets.',
         href: '/pdf/pdf-to-excel',
         icon: Table,
-        iconColor: '#ef4444',
-        category: 'PDF',
-        gradient: 'from-red-500/10 to-transparent'
-    },
-    {
-        title: 'PDF to PowerPoint',
-        description: 'Convert PDF slides to PowerPoint.',
-        href: '/pdf/pdf-to-ppt',
-        icon: Presentation,
         iconColor: '#ef4444',
         category: 'PDF',
         gradient: 'from-red-500/10 to-transparent'

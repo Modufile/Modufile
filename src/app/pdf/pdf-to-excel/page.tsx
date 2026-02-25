@@ -6,11 +6,12 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Table, AlertTriangle, FileOutput, AlertCircle } from 'lucide-react';
+import { Table, X, FileOutput, AlertTriangle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
-import { loadMuPDF } from '@/lib/core/mupdf-loader';
+import { loadPyMuPDF, preloadPyMuPDF } from '@/lib/pymupdf-loader';
+import * as XLSX from 'xlsx';
 
 interface PDFFile {
     id: string;
@@ -22,18 +23,25 @@ interface PDFFile {
 
 export default function PDFToExcelPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<Blob | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [stage, setStage] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [tableCount, setTableCount] = useState(0);
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
+
+    // Preload PyMuPDF engine on page mount
+    useEffect(() => {
+        preloadPyMuPDF();
+    }, []);
 
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
         setResult(null);
+        setError(null);
+        setTableCount(0);
         try {
             const { PDFDocument } = await import('pdf-lib');
             const buf = await f.arrayBuffer();
@@ -41,8 +49,6 @@ export default function PDFToExcelPage() {
             setFile({ id: crypto.randomUUID(), file: f, name: f.name, size: f.size, pageCount: doc.getPageCount() });
         } catch (err) {
             console.error('Failed to load PDF', err);
-        } finally {
-            setIsLoading(false);
         }
     }, []);
 
@@ -56,63 +62,64 @@ export default function PDFToExcelPage() {
     const handleConvert = useCallback(async () => {
         if (!file) return;
         setIsProcessing(true);
+        setStage('Loading engine...');
         setError(null);
-        try {
-            const mupdf = await loadMuPDF();
-            const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
-            const pageCount = doc.countPages();
 
-            const allRows: string[][] = [];
+        try {
+            const pymupdf = await loadPyMuPDF();
+
+            setStage('Opening document...');
+            const doc = await pymupdf.open(file.file);
+            const pageCount: number = doc.pageCount;
+
+            interface TableData {
+                page: number;
+                rows: (string | null)[][];
+            }
+
+            const allTables: TableData[] = [];
 
             for (let i = 0; i < pageCount; i++) {
-                try {
-                    const page = doc.loadPage(i);
-                    // "preserve-spans" is required for font info in JSON output
-                    const stext = page.toStructuredText('preserve-spans');
-                    const json = stext.asJSON();
-                    const data = JSON.parse(json);
+                setStage(`Scanning page ${i + 1} of ${pageCount}...`);
+                const page = doc.getPage(i);
+                const tables = page.findTables();
 
-                    if (data.blocks) {
-                        for (const block of data.blocks) {
-                            if (block.type === 'image') continue;
-                            if (block.lines) {
-                                for (const line of block.lines) {
-                                    // MuPDF asJSON() schema: line.text is the text,
-                                    // line.x is the x-origin for column positioning
-                                    const text = (line.text || '').trim();
-                                    if (text) {
-                                        // Split by multiple spaces to detect tab-separated columns
-                                        const columns = text.split(/\s{2,}/).map((c: string) => c.trim()).filter(Boolean);
-                                        allRows.push(columns.length > 1 ? columns : [text]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    stext.destroy();
-                    page.destroy();
-                } catch (pageErr) {
-                    console.warn(`Failed to extract data from page ${i + 1}:`, pageErr);
-                }
+                tables.forEach((table: { rows: (string | null)[][] }) => {
+                    allTables.push({ page: i + 1, rows: table.rows });
+                });
             }
 
-            if (allRows.length === 0) {
-                allRows.push(['No data extracted', 'The PDF might be a scanned image']);
+            if (allTables.length === 0) {
+                setError('No tables were detected in this PDF. This tool works best with documents containing clear table structures.');
+                return;
             }
 
-            doc.destroy();
+            setStage('Creating Excel file...');
 
-            const XLSX = await import('xlsx');
-            const ws = XLSX.utils.aoa_to_sheet(allRows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Extracted Data');
-            const xlsxBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const workbook = XLSX.utils.book_new();
 
-            setResult(new Blob([xlsxBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-        } catch (err) {
+            if (allTables.length === 1) {
+                const worksheet = XLSX.utils.aoa_to_sheet(allTables[0].rows);
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Table');
+            } else {
+                allTables.forEach((table, idx) => {
+                    const sheetName = `Table ${idx + 1} (Page ${table.page})`.substring(0, 31);
+                    const worksheet = XLSX.utils.aoa_to_sheet(table.rows);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+                });
+            }
+
+            const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([xlsxData], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+
+            setTableCount(allTables.length);
+            setResult(blob);
+            setStage('');
+        } catch (err: any) {
             console.error('PDF to Excel conversion failed:', err);
-            setError(err instanceof Error ? err.message : 'Conversion failed. Please try again.');
+            setError(err.message || 'Conversion failed');
         } finally {
             setIsProcessing(false);
         }
@@ -137,15 +144,18 @@ export default function PDFToExcelPage() {
                     <div className="bg-amber-500/5 border border-amber-800/30 rounded-xl p-4">
                         <div className="flex gap-2 mb-2">
                             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-300/80">Works best with PDFs containing clear tabular data. Complex layouts may require manual adjustment after conversion.</p>
+                            <p className="text-xs text-amber-300/80">
+                                This tool uses <strong>PyMuPDF</strong> to detect and extract tables from your PDF.
+                                It works best for documents with clear table structures.
+                            </p>
                         </div>
                     </div>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
                         <h3 className="font-medium text-sm text-zinc-100 mb-3">Output details</h3>
                         <ul className="space-y-2 text-sm text-zinc-400">
                             <li>📊 Standard .xlsx format</li>
-                            <li>📋 Column detection from text positions</li>
-                            <li>📄 One sheet per document</li>
+                            <li>📋 One sheet per table detected</li>
+                            <li>📄 Tables labeled by page number</li>
                         </ul>
                     </div>
                 </div>
@@ -154,9 +164,7 @@ export default function PDFToExcelPage() {
             techSetup={content?.techSetup}
             faqs={content?.faqs}
         >
-            {isLoading ? (
-                <FileProcessingOverlay message="Reading PDF…" />
-            ) : !file ? (
+            {!file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
                     acceptedTypes={['application/pdf']}
@@ -174,14 +182,19 @@ export default function PDFToExcelPage() {
                                     <p className="text-xs text-zinc-500">{formatFileSize(file.size)} · {file.pageCount} page{file.pageCount > 1 ? 's' : ''}</p>
                                 </div>
                             </div>
-                            <button onClick={() => { setFile(null); setResult(null); setError(null); }}
+                            <button onClick={() => { setFile(null); setResult(null); setError(null); setTableCount(0); }}
                                 className="p-2 hover:bg-zinc-700/50 rounded-lg transition-colors">
                                 <X className="w-4 h-4 text-zinc-400" />
                             </button>
                         </div>
                     </motion.div>
 
-                    {isProcessing && <FileProcessingOverlay message="Extracting data to Excel…" />}
+                    {isProcessing && (
+                        <FileProcessingOverlay
+                            message={stage || 'Extracting tables...'}
+                            subMessage={stage === 'Loading engine...' ? 'Downloading components (first time only)' : undefined}
+                        />
+                    )}
 
                     {error && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -197,7 +210,9 @@ export default function PDFToExcelPage() {
                                 <FileOutput className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">Extraction Complete!</h3>
-                            <p className="text-sm text-zinc-400 mb-4">Your Excel spreadsheet is ready.</p>
+                            <p className="text-sm text-zinc-400 mb-4">
+                                Found {tableCount} table{tableCount > 1 ? 's' : ''}. Your Excel spreadsheet is ready.
+                            </p>
                             <button onClick={handleDownload}
                                 className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
                                 Download .xlsx
@@ -211,7 +226,7 @@ export default function PDFToExcelPage() {
                 isVisible={!!file && !result && !isProcessing}
                 isProcessing={isProcessing}
                 onAction={handleConvert}
-                actionLabel={<><Table className="w-4 h-4" /> Convert to Excel</>}
+                actionLabel={<><Table className="w-4 h-4" /> Extract Tables</>}
             />
         </ToolPageLayout>
     );

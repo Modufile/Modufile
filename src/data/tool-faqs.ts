@@ -1114,25 +1114,6 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
 
-    'pdf-to-ppt': {
-        about: 'Modufile\'s PDF to PowerPoint converter renders each PDF page as a high-resolution image (150 DPI) using the MuPDF WASM engine, then embeds each image as a full-bleed slide in a .pptx file using pptxgenjs. Each slide preserves the exact visual appearance of the original PDF page. Note that the resulting slides are image-based — text is not directly editable within PowerPoint. This approach guarantees pixel-perfect visual fidelity, making it ideal for converting reports, handouts, or visual documents into presentation format. The entire process runs in your browser.',
-        techSetup: [
-            { library: 'mupdf', purpose: 'Renders each PDF page as a high-resolution image (150 DPI) using the MuPDF WASM engine' },
-            { library: 'pptxgenjs', purpose: 'Creates PowerPoint presentations with one image-based slide per PDF page' },
-        ],
-        faqs: [
-            { question: 'Can I edit the text in the PowerPoint slides?', answer: 'No. Each slide is an image of the original PDF page, preserving exact visual fidelity but without editable text. This ensures the layout looks exactly like the original. For editable text, convert the PDF to Word instead.' },
-            { question: 'What DPI are the slides rendered at?', answer: 'Pages are rendered at 150 DPI, which provides a good balance between image quality and file size. This is sufficient for on-screen presentations and standard printing.' },
-            { question: 'Can I add notes or edit slides after conversion?', answer: 'Yes. While the slide background is an image, you can add text boxes, shapes, notes, and other PowerPoint elements on top of the image in any presentation editor.' },
-            { question: 'Is my file uploaded to a server?', answer: 'No. Both MuPDF and pptxgenjs run entirely in your browser. Your PDF and the resulting PowerPoint file never leave your device.' },
-            { question: 'Is the PDF to PowerPoint converter free?', answer: 'Yes. It is completely free with no limits, no watermarks, and no sign-up required.' },
-            { question: 'Will the output file be large?', answer: 'Since each slide is a rendered image, the output file can be larger than the original PDF — especially for documents with many pages. A 20-page PDF at 150 DPI typically produces a PPTX file of 10–30 MB depending on page content.' },
-            { question: 'Can I choose a higher resolution?', answer: 'Currently the tool renders at 150 DPI, which is optimized for presentations. Higher DPI settings would significantly increase file size and processing time without noticeable improvement at typical presentation viewing distances.' },
-            { question: 'Why image-based slides instead of extracting text?', answer: 'PDF layouts use absolute positioning that doesn\'t map cleanly to PowerPoint\'s slide model. Rendering as images guarantees that every element — text, graphics, charts, tables — appears exactly as it does in the original PDF, without layout distortion.' },
-        ],
-    },
-
-
     'office-to-pdf': {
         about: 'Modufile\'s Office to PDF converter transforms Word, Excel, and PowerPoint files into PDF format using ZetaOffice — the full LibreOffice engine compiled to WebAssembly. This provides desktop-quality conversion fidelity, correctly handling tracked changes, footnotes, charts, embedded objects, complex formatting, and all the nuances that simpler converters miss. It supports DOCX, DOC, XLSX, XLS, PPTX, PPT, and their OpenDocument equivalents (ODT, ODS, ODP). The conversion engine (~50 MB) downloads once and is cached by the browser for instant subsequent use. Since everything runs client-side, your documents are never uploaded to a server — a significant privacy advantage over cloud-based converters.',
         techSetup: [

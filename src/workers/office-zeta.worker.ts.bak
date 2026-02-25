@@ -1,0 +1,254 @@
+/**
+ * Office-Zeta Worker
+ * 
+ * Handles bidirectional Office <-> PDF conversions using ZetaJS (LibreOffice WASM).
+ * This is the heaviest engine (~50MB WASM download on first use).
+ * 
+ * Features:
+ * - Office → PDF (native LibreOffice export)
+ * - PDF → Office (native LibreOffice import via writer_pdf_import)
+ */
+
+const ctx = self as unknown as DedicatedWorkerGlobalScope;
+
+// Fix for TypeScript not knowing importScripts exists in this context
+declare const importScripts: (...urls: string[]) => void;
+
+// Stub `document` for headless worker operation.
+// LibreOffice WASM (soffice.js) tries to access document.querySelector('#qtcanvas')
+// for canvas transfer, which doesn't exist in a Worker context.
+if (typeof document === 'undefined') {
+    const dummyCanvas = new OffscreenCanvas(1, 1);
+    (globalThis as any).document = {
+        querySelector: () => dummyCanvas,
+        getElementById: () => dummyCanvas,
+        createElement: (tag: string) => {
+            if (tag === 'canvas') return dummyCanvas;
+            return {};
+        },
+        createElementNS: () => ({}),
+        body: { appendChild: () => { } },
+    };
+}
+
+// CDN for ZetaOffice WASM assets
+// Switching to local hosting to satisfy COEP: require-corp (Cross-Origin Embedder Policy)
+// The user must download these files to public/zeta/
+const ZETA_CDN = '/zeta/';
+
+let zetaInstance: any = null;
+
+// Map file extensions to LibreOffice export filters
+// For Office -> PDF
+const TO_PDF_FILTERS: Record<string, string> = {
+    docx: 'writer_pdf_Export',
+    doc: 'writer_pdf_Export',
+    odt: 'writer_pdf_Export',
+    rtf: 'writer_pdf_Export',
+    txt: 'writer_pdf_Export',
+    xlsx: 'calc_pdf_Export',
+    xls: 'calc_pdf_Export',
+    ods: 'calc_pdf_Export',
+    csv: 'calc_pdf_Export',
+    pptx: 'impress_pdf_Export',
+    ppt: 'impress_pdf_Export',
+    odp: 'impress_pdf_Export',
+};
+
+// For PDF -> Office
+const FROM_PDF_FILTERS: Record<string, string> = {
+    docx: 'MS Word 2007 XML',
+    doc: 'MS Word 97',
+    xlsx: 'Calc MS Excel 2007 XML',
+    pptx: 'Impress MS PowerPoint 2007 XML',
+};
+
+/**
+ * Initialize ZetaJS / LibreOffice WASM
+ * This triggers the large WASM download on first use.
+ */
+async function getZeta(): Promise<any> {
+    if (zetaInstance) return zetaInstance;
+
+    return new Promise((resolve, reject) => {
+        // ZetaJS expects 'Module' to be on the global scope
+        (globalThis as any).Module = {
+            // Tell Emscripten where to find the WASM file
+            locateFile: (path: string, prefix: string) => {
+                if (path.endsWith('.wasm') || path.endsWith('.data') || path.endsWith('.metadata') || path.endsWith('.js')) {
+                    // Load WASM/Data from the public zeta path to avoid Next.js static/chunks/ 404s
+                    return `${ZETA_CDN}${path}`;
+                }
+                return prefix + path;
+            },
+
+            // zeta.js must be the first script to load
+            uno_scripts: [`${ZETA_CDN}zeta.js`],
+
+            onRuntimeInitialized() {
+                try {
+                    zetaInstance = (globalThis as any).Module.zetajs;
+                    console.log('[ZetaWorker] Engine initialized');
+                    resolve(zetaInstance);
+                } catch (err) {
+                    reject(err);
+                }
+            },
+
+            onAbort(reason: string) {
+                reject(new Error(`ZetaOffice WASM aborted: ${reason}`));
+            },
+
+            // Optional: intercept stdout/stderr for debugging
+            print: (text: string) => console.log('[ZetaWASM]', text),
+            printErr: (text: string) => console.warn('[ZetaWASM]', text),
+        };
+
+        // Load the main runtime script
+        importScripts(`${ZETA_CDN}soffice.js`);
+    });
+}
+
+/**
+ * Handle conversion request
+ */
+async function handleConversion(
+    fileBuffer: ArrayBuffer,
+    fileName: string,
+    targetFormat: 'pdf' | 'docx' | 'xlsx' | 'pptx'
+): Promise<ArrayBuffer> {
+    const zeta = await getZeta();
+    const css = zeta.uno.com.sun.star;
+
+    // Detect direction
+    const inputExt = fileName.split('.').pop()?.toLowerCase() ?? '';
+    const isToPdf = targetFormat === 'pdf';
+
+    // Determine filters
+    let importFilter = ''; // Default auto-detect
+    let exportFilter = '';
+
+    if (isToPdf) {
+        // Office -> PDF
+        exportFilter = TO_PDF_FILTERS[inputExt];
+        if (!exportFilter) throw new Error(`Unsupported input format: .${inputExt}`);
+    } else {
+        // PDF -> Office
+        if (inputExt !== 'pdf') throw new Error('Input must be PDF for this operation');
+
+        // Force PDF import as editable document
+        importFilter = 'writer_pdf_import';
+        exportFilter = FROM_PDF_FILTERS[targetFormat];
+
+        if (!exportFilter) throw new Error(`Unsupported output format: .${targetFormat}`);
+    }
+
+    // Virtual filesystem paths
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const inputPath = `/tmp/${safeName}`;
+    const outputName = safeName.replace(/\.[^.]+$/, `.${targetFormat}`);
+    const outputPath = `/tmp/${outputName}`;
+
+    try {
+        // 1. Write input file to virtual FS
+        zeta.FS.writeFile(inputPath, new Uint8Array(fileBuffer));
+
+        // 2. Load the document (Headless/Hidden mode)
+        const desktop = css.frame.Desktop.create(zeta.getUnoComponentContext());
+
+        const loadProps: any[] = [
+            { Name: 'Hidden', Value: true },
+            { Name: 'ReadOnly', Value: false }, // Must be editable for conversion
+        ];
+
+        // Explicit import filter needed for PDF editing
+        if (importFilter) {
+            loadProps.push({ Name: 'FilterName', Value: importFilter });
+
+            // For PDF->Excel/PPT, we might need specific import options, 
+            // but writer_pdf_import puts everything into Writer. 
+            // LibreOffice doesn't support direct PDF->Calc/Impress import well without extensions.
+            // However, spec says we use writer_pdf_import.
+            // NOTE: If target is xlsx, we are exporting Writer content to Excel.
+        }
+
+        const component = desktop.loadComponentFromURL(
+            `file://${inputPath}`,
+            '_blank',
+            0,
+            loadProps
+        );
+
+        if (!component) throw new Error('Failed to load document');
+
+        // 3. Export to target format
+        const storeProps = [
+            { Name: 'FilterName', Value: exportFilter },
+            { Name: 'Overwrite', Value: true },
+        ];
+
+        component.storeToURL(`file://${outputPath}`, storeProps);
+        component.close(true);
+
+        // 4. Read back output
+        const outputBytes = zeta.FS.readFile(outputPath);
+        return outputBytes.buffer as ArrayBuffer;
+
+    } finally {
+        // Cleanup virtual FS
+        try { zeta.FS.unlink(inputPath); } catch { }
+        try { zeta.FS.unlink(outputPath); } catch { }
+    }
+}
+
+ctx.addEventListener('message', async (e: MessageEvent) => {
+    const { type, operationId, payload } = e.data;
+
+    // Preload: just initialize the engine without processing a file
+    if (type === 'preload') {
+        try {
+            await getZeta();
+            ctx.postMessage({ type: 'preload-done' });
+        } catch (err: any) {
+            console.warn('[ZetaWorker] Preload failed:', err.message);
+        }
+        return;
+    }
+
+    if (type !== 'exec') return;
+
+    const { fileBuffer, fileName, targetFormat } = payload as {
+        fileBuffer: ArrayBuffer;
+        fileName: string;
+        targetFormat: 'pdf' | 'docx' | 'xlsx' | 'pptx';
+    };
+
+    try {
+        ctx.postMessage({ type: 'progress', operationId, percent: 10, stage: 'Initializing engine...' });
+
+        // Ensure engine is loaded
+        await getZeta();
+
+        ctx.postMessage({ type: 'progress', operationId, percent: 30, stage: 'Converting document...' });
+
+        const resultBuffer = await handleConversion(fileBuffer, fileName, targetFormat || 'pdf');
+
+        ctx.postMessage({ type: 'progress', operationId, percent: 100, stage: 'Done' });
+
+        ctx.postMessage({
+            type: 'result',
+            operationId,
+            payload: resultBuffer
+        }, [resultBuffer]); // Transfer buffer
+
+    } catch (err: any) {
+        console.error('[ZetaWorker] Error:', err);
+        ctx.postMessage({
+            type: 'error',
+            operationId,
+            error: err.message || 'Conversion failed'
+        });
+    }
+});
+
+export { };

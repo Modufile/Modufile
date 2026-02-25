@@ -178,9 +178,9 @@ class PdfEngineImpl {
      */
     warmUp(): void {
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.pool.ensureWorker('pdf-core'), { timeout: 8000 });
+            requestIdleCallback(() => this.pool.preloadWorker('pdf-core'), { timeout: 8000 });
         } else {
-            setTimeout(() => this.pool.ensureWorker('pdf-core'), 3000);
+            setTimeout(() => this.pool.preloadWorker('pdf-core'), 3000);
         }
     }
 

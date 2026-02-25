@@ -75,10 +75,10 @@ export function TransparencySection() {
                     <div className="space-y-8">
                         <div>
                             <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-6">
-                                Zero-Knowledge<br />
+                                Built so you don’t have to trust us.<br />
                             </h2>
                             <p className="text-lg text-zinc-400 leading-relaxed">
-                                You don’t need to trust a stranger’s “secure” cloud server. Your files stay on your device. We can’t see them. We don’t want to.
+                                No uploads. No file tracking. No metadata collection. Processing happens directly in your browser. Your files stay on your device. We can’t see them. We don’t want to.
                             </p>
                         </div>
 

@@ -27,6 +27,18 @@ async function ensureMuPDF() {
 
 ctx.addEventListener('message', async (e: MessageEvent) => {
     const { type, operationId, payload } = e.data;
+
+    // Preload: just initialize MuPDF without processing a file
+    if (type === 'preload') {
+        try {
+            await ensureMuPDF();
+            ctx.postMessage({ type: 'preload-done' });
+        } catch (err: any) {
+            console.warn('[PdfCoreWorker] Preload failed:', err.message);
+        }
+        return;
+    }
+
     if (type !== 'exec') return;
 
     try {

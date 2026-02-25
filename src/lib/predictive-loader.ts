@@ -55,3 +55,4 @@ export function createHoverPrefetch(wasmUrl: string, delayMs = 300) {
 export function prefetchWasm(wasmUrl: string): void {
     fetch(wasmUrl, { priority: 'low' as RequestPriority }).catch(() => { });
 }
+
