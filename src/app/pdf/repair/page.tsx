@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Wrench, CheckCircle } from 'lucide-react';
+import { FileText, X, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -31,7 +31,7 @@ export default function RepairPdfPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         setResult(null);
         setError(null);
         setFile({ id: crypto.randomUUID(), file: f, name: f.name, size: f.size });
@@ -45,34 +45,33 @@ export default function RepairPdfPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleRepair = useCallback(async () => {
-        if (!file) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file selected');
         setIsProcessing(true);
         setError(null);
         try {
             const mupdf = await loadMuPDF();
             const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf').asPDF();
+            const genDoc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
+            const doc = genDoc.asPDF();
             if (!doc) throw new Error('Could not parse PDF');
 
-            const outBuf = doc.saveToBuffer('garbage=4,compress,clean');
-            const bytes = outBuf.asUint8Array().slice();
-            doc.destroy();
+            const outBuf = doc.saveToBuffer('garbage=deduplicate,compress,clean,sanitize');
+            const bytes = new Uint8Array(outBuf.asUint8Array());
+            genDoc.destroy();
 
-            setResult(new Blob([bytes], { type: 'application/pdf' }));
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            setResult(blob);
+            const base = file.name.replace(/\.pdf$/i, '');
+            return { blob, filename: `${base}-repaired.pdf` };
         } catch (err) {
             setError('Could not repair this PDF. The file may be too severely damaged.');
             console.error('Repair failed:', err);
+            throw err;
         } finally {
             setIsProcessing(false);
         }
     }, [file]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result, `${base}-repaired.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-repair'];
 
@@ -82,8 +81,20 @@ export default function RepairPdfPage() {
             description="Fix corrupted or damaged PDF files"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Repair PDF"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-repair'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-repair'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <>
                     <h3 className="font-medium text-sm text-zinc-100 mb-3">What gets fixed</h3>
                     <ul className="space-y-3 text-sm text-zinc-400">
                         <li>🔧 <strong className="text-zinc-200">Cross-reference tables</strong> — corrupted xref repair</li>
@@ -91,7 +102,7 @@ export default function RepairPdfPage() {
                         <li>🔗 <strong className="text-zinc-200">Page links</strong> — broken page tree fixing</li>
                         <li>🗑️ <strong className="text-zinc-200">Orphaned data</strong> — cleanup of unused resources</li>
                     </ul>
-                </div>
+                </>
             }
             about={content?.about}
             techSetup={content?.techSetup}
@@ -140,22 +151,12 @@ export default function RepairPdfPage() {
                                 <CheckCircle className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">PDF Repaired!</h3>
-                            <p className="text-sm text-zinc-400 mb-4">Structural issues have been resolved.</p>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download Repaired PDF
-                            </button>
+                            <p className="text-sm text-zinc-400">Structural issues have been resolved.</p>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleRepair}
-                actionLabel={<><Wrench className="w-4 h-4" /> Repair PDF</>}
-            />
         </ToolPageLayout>
     );
 }

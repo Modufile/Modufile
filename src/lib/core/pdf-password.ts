@@ -50,10 +50,10 @@ export async function authenticateWithPassword(
             'application/pdf',
         );
 
-        // MuPDF's authenticatePassword returns true if password is correct
-        const success = doc.authenticatePassword(password);
+        // MuPDF's authenticatePassword returns: 0=failed, 1=no password, 2=user, 4=owner, 6=both
+        const authResult = doc.authenticatePassword(password);
 
-        if (!success) {
+        if (authResult === 0) {
             return { success: false, document: null };
         }
 

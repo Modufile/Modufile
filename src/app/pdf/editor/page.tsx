@@ -1,18 +1,24 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Dropzone, FileProcessingOverlay, Logo } from '@/components/ui';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Dropzone, Logo, DownloadToast } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
-import {
-    FileText, X, Type, ImagePlus, EyeOff, Save,
-    ChevronLeft, ChevronRight, Trash2, Upload,
-    MousePointer, Undo2, Redo2, ZoomIn, ZoomOut,
-    Square, Loader2,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { formatFileSize } from '@/lib/core/format';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
+import { useMuPDF, type AddAnnotationParams, type PageInfo, type AnnotationInfo } from '@/hooks/useMuPDF';
+import { AnnotationToolbar, type AnnotationTool } from '@/components/pdf/AnnotationToolbar';
+import { PropertyPanel, type AnnotationProperties } from '@/components/pdf/PropertyPanel';
+import type { AppliedChange } from '@/components/tools/AppliedChangesPanel';
+import { StampPicker, type StampOption } from '@/components/pdf/StampPicker';
+import { screenToPdf, pdfToScreen, screenRectToPdfRect, type Rect } from '@/lib/pdf-coordinates';
+import { TextEditOverlay, type TextCommitOptions } from '@/components/pdf/TextEditOverlay';
 import { downloadBlob } from '@/lib/core/download';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { formatFileSize } from '@/lib/core/format';
+import Link from 'next/link';
+import {
+    FileText, X,
+    ZoomIn, ZoomOut, Loader2, Download,
+} from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -23,80 +29,67 @@ interface PDFFile {
     file: File;
     size: number;
     pageCount: number;
+    pages: PageInfo[];
 }
 
-type EditorTool = 'select' | 'text' | 'image' | 'redact';
+type DragMode = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | null;
 
-interface BaseAnnotation {
-    id: string;
-    type: string;
-    pageIndex: number;
-    x: number;
-    y: number;
+interface TextEditState {
+    cssX: number;
+    cssY: number;
+    boxWidth?: number;
+    pdfX: number;
+    pdfY: number;
+    pageIdx: number;
+    /** Set when re-editing an existing annotation */
+    annotIndex?: number;
+    initialText?: string;
 }
 
-interface TextAnnotation extends BaseAnnotation {
-    type: 'text';
-    text: string;
-    fontSize: number;
-    fontName: string;
-    color: string;
+interface DragState {
+    startX: number;
+    startY: number;
+    origRect: number[];
+    origLinePoints?: number[];
+    origInkList?: number[][][];
+    origQuadPoints?: number[][];
 }
-
-interface ImageAnnotation extends BaseAnnotation {
-    type: 'image';
-    width: number;
-    height: number;
-    imageData: ArrayBuffer;
-    imageType: 'png' | 'jpg';
-    naturalWidth: number;
-    naturalHeight: number;
-    previewUrl: string;
-    opacity: number;
-}
-
-interface RedactAnnotation extends BaseAnnotation {
-    type: 'redact';
-    width: number;
-    height: number;
-    color: string;
-}
-
-type Annotation = TextAnnotation | ImageAnnotation | RedactAnnotation;
-
-interface HistoryEntry {
-    annotations: Annotation[];
-}
-
-const WORKER_SRC = '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-
-const FONT_OPTIONS = [
-    { value: 'Helvetica', label: 'Helvetica' },
-    { value: 'TimesRoman', label: 'Times Roman' },
-    { value: 'Courier', label: 'Courier' },
-    { value: 'Helvetica-Bold', label: 'Helvetica Bold' },
-    { value: 'TimesRoman-Bold', label: 'Times Bold' },
-    { value: 'Courier-Bold', label: 'Courier Bold' },
-];
-
-const fontNameMap: Record<string, typeof StandardFonts[keyof typeof StandardFonts]> = {
-    'Helvetica': StandardFonts.Helvetica,
-    'TimesRoman': StandardFonts.TimesRoman,
-    'Courier': StandardFonts.Courier,
-    'Helvetica-Bold': StandardFonts.HelveticaBold,
-    'TimesRoman-Bold': StandardFonts.TimesRomanBold,
-    'Courier-Bold': StandardFonts.CourierBold,
-};
-
-const TOOL_ITEMS: { tool: EditorTool; icon: typeof MousePointer; label: string; shortcut: string }[] = [
-    { tool: 'select', icon: MousePointer, label: 'Select', shortcut: 'V' },
-    { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },
-    { tool: 'image', icon: ImagePlus, label: 'Image', shortcut: 'I' },
-    { tool: 'redact', icon: EyeOff, label: 'Redact', shortcut: 'R' },
-];
 
 /* ------------------------------------------------------------------ */
-/*  Editor Component                                                   */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+// Parse hex string stamp colors (StampOption uses hex strings)
+function hexToRgb01(hex: string): [number, number, number] {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    return [r, g, b];
+}
+
+// Convert 0-255 property values to 0-1 for MuPDF
+function rgb01(r: number, g: number, b: number): [number, number, number] {
+    return [r / 255, g / 255, b / 255];
+}
+
+// Maps stamp labels to MuPDF predefined icon names
+const STAMP_ICON_MAP: Record<string, string> = {
+    'Approved': 'Approved',
+    'Rejected': 'NotApproved',
+    'Not Approved': 'NotApproved',
+    'Draft': 'Draft',
+    'Confidential': 'Confidential',
+    'Final': 'Final',
+    'Experimental': 'Experimental',
+    'For Comment': 'ForComment',
+    'Top Secret': 'TopSecret',
+};
+
+// Corner handle hit radius in canvas pixels
+const HANDLE_HIT_PX = 10;
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export default function PDFEditorPage() {
@@ -106,63 +99,114 @@ export default function PDFEditorPage() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     // Editor state
-    const [activeTool, setActiveTool] = useState<EditorTool>('select');
+    const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
     const [currentPage, setCurrentPage] = useState(0);
-    const [annotations, setAnnotations] = useState<Annotation[]>([]);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [pageRendered, setPageRendered] = useState(false);
-    const [zoom, setZoom] = useState(1.5);
+    const [zoom, setZoom] = useState(1);
+    const [renderedPages, setRenderedPages] = useState<Map<number, { url: string; w: number; h: number }>>(new Map());
+    const renderedUrlsRef = useRef<Map<number, string>>(new Map()); // for URL cleanup
+    const [renderingPages, setRenderingPages] = useState<Set<number>>(new Set());
+    const [pageAnnotations, setPageAnnotations] = useState<AnnotationInfo[]>([]);
+    const [hasChanges, setHasChanges] = useState(false);
 
-    // Text tool settings
-    const [textFontSize, setTextFontSize] = useState(16);
-    const [textFont, setTextFont] = useState('Helvetica');
-    const [textColor, setTextColor] = useState('#000000');
+    // Selection
+    const [selectedAnnotIndex, setSelectedAnnotIndex] = useState<number | null>(null);
+    const selectedAnnotIndexRef = useRef<number | null>(null);
+    useEffect(() => { selectedAnnotIndexRef.current = selectedAnnotIndex; }, [selectedAnnotIndex]);
 
-    // Redact tool settings
-    const [redactColor, setRedactColor] = useState('#000000');
+    // Drag / resize state
+    const [dragMode, setDragMode] = useState<DragMode>(null);
+    const dragStateRef = useRef<DragState | null>(null);
+    const [dragPreviewPdfRect, setDragPreviewPdfRect] = useState<number[] | null>(null);
+    const [hoverCursor, setHoverCursor] = useState<'move' | 'resize' | null>(null);
+
+    // Download toast
+    const [toastInfo, setToastInfo] = useState<{ filename: string; blobUrl: string } | null>(null);
+
+    // Mobile panel
+    const [mobilePanelCollapsed, setMobilePanelCollapsed] = useState(true);
+
+    // Stamp picker
+    const [showStampPicker, setShowStampPicker] = useState(false);
+    const [selectedStamp, setSelectedStamp] = useState<StampOption | null>(null);
+
+    // Properties (r/g/b in 0-255 range)
+    const [properties, setProperties] = useState<AnnotationProperties>({
+        r: 255, g: 255, b: 0,          // yellow stroke/bg
+        textR: 0, textG: 0, textB: 0,  // black text
+        textBgTransparent: true,
+        opacity: 0.5,
+        borderWidth: 2,
+        fontSize: 14,
+        fontName: 'Helv',
+        text: '',
+    });
+
+    // Drawing state
     const [isDrawing, setIsDrawing] = useState(false);
     const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
-    const [currentDraw, setCurrentDraw] = useState<{ x: number; y: number } | null>(null);
+    const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
+    const [inkPoints, setInkPoints] = useState<Array<[number, number]>>([]);
 
-    // Image dragging
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    // Image stamp
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const [pendingImage, setPendingImage] = useState<{ data: ArrayBuffer; name: string; width: number; height: number } | null>(null);
 
-    // History
-    const [history, setHistory] = useState<HistoryEntry[]>([{ annotations: [] }]);
-    const [historyIndex, setHistoryIndex] = useState(0);
+    // Rich text overlay
+    const [textEditState, setTextEditState] = useState<TextEditState | null>(null);
+    /** Ref to the active page container div, for positioning the overlay */
+    const activePageDivRef = useRef<HTMLDivElement>(null);
+    /** Client coords at the start of a freetext drag, for overlay positioning */
+    const freeTextDragStartClientRef = useRef<{ x: number; y: number } | null>(null);
 
     // Refs
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const overlayRef = useRef<HTMLDivElement>(null);
-    const pdfDocRef = useRef<any>(null);
-    const imageInputRef = useRef<HTMLInputElement>(null);
+    const canvasContainerRef = useRef<HTMLDivElement>(null);
+    const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
 
-    /* ---- file loading ---- */
+    // Output filename
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(
+        file?.name || 'output.pdf', '_annotated'
+    );
+
+    // MuPDF hook
+    const mupdf = useMuPDF();
+    useEffect(() => { mupdf.warmup(); }, [mupdf]);
+
+    const dpi = useMemo(() => {
+        const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+        return Math.round(72 * zoom * dpr);
+    }, [zoom]);
+
+    /* ---- File loading ---- */
     const handleFileAdded = useCallback(async (files: File[]) => {
         const f = files[0];
-        if (!f) return;
+        if (!f || f.type !== 'application/pdf') return;
+
         setIsLoading(true);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
         try {
-            const arrayBuffer = await f.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const buffer = await f.arrayBuffer();
+            const result = await mupdf.load(buffer);
+
             setFile({
                 name: f.name,
                 file: f,
                 size: f.size,
-                pageCount: pdfDoc.getPageCount(),
+                pageCount: result.pageCount,
+                pages: result.pages,
             });
             setCurrentPage(0);
-            setAnnotations([]);
-            setHistory([{ annotations: [] }]);
-            setHistoryIndex(0);
+            setHasChanges(false);
+            setSelectedAnnotIndex(null);
         } catch (err) {
             console.error('Failed to load PDF:', err);
+            alert('Failed to load PDF. The file may be corrupted or password-protected.');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [mupdf]);
 
+    // Store integration
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
     useEffect(() => {
         if (source === 'homepage' && storedFiles.length > 0) {
@@ -172,195 +216,768 @@ export default function PDFEditorPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    /* ---- render current page ---- */
+    /* ---- Render functions ---- */
+    const renderPage = useCallback(async (idx: number) => {
+        if (!file) return;
+        setRenderingPages(prev => new Set([...prev, idx]));
+        try {
+            const result = await mupdf.renderPage(idx, dpi);
+            const blob = new Blob([result.pngData], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            const oldUrl = renderedUrlsRef.current.get(idx);
+            if (oldUrl) URL.revokeObjectURL(oldUrl);
+            renderedUrlsRef.current.set(idx, url);
+            setRenderedPages(prev => {
+                const next = new Map(prev);
+                next.set(idx, { url, w: result.width, h: result.height });
+                return next;
+            });
+        } catch (err) {
+            console.error(`Failed to render page ${idx}:`, err);
+        } finally {
+            setRenderingPages(prev => { const next = new Set(prev); next.delete(idx); return next; });
+        }
+    }, [file, dpi, mupdf]);
+
+    const refreshCurrentPage = useCallback(async () => {
+        if (!file) return;
+        await renderPage(currentPage);
+        const annotsResult = await mupdf.getAnnotations(currentPage);
+        setPageAnnotations(annotsResult.annotations);
+        setSelectedAnnotIndex(null);
+    }, [renderPage, currentPage, file, mupdf]);
+
+    // Render all pages when file loads
     useEffect(() => {
         if (!file) return;
-        let cancelled = false;
-
-        const render = async () => {
-            setPageRendered(false);
-            const pdfjs = await import('pdfjs-dist');
-            if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+        setRenderedPages(new Map());
+        setRenderingPages(new Set());
+        // Revoke all old URLs
+        renderedUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+        renderedUrlsRef.current.clear();
+        // Render all pages sequentially
+        (async () => {
+            for (let i = 0; i < file.pageCount; i++) {
+                await renderPage(i);
             }
+        })();
+    }, [file?.name]); // eslint-disable-line
 
-            if (!pdfDocRef.current) {
-                const buf = await file.file.arrayBuffer();
-                pdfDocRef.current = await pdfjs.getDocument({ data: buf }).promise;
-            }
-
-            const page = await pdfDocRef.current.getPage(currentPage + 1);
-            const viewport = page.getViewport({ scale: zoom });
-
-            const canvas = canvasRef.current;
-            if (!canvas || cancelled) return;
-
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            if (!cancelled) setPageRendered(true);
-        };
-
-        render();
-        return () => { cancelled = true; };
-    }, [file, currentPage, zoom]);
-
-    /* ---- history management ---- */
-    const pushHistory = useCallback((newAnnotations: Annotation[]) => {
-        setHistory(prev => {
-            const trimmed = prev.slice(0, historyIndex + 1);
-            return [...trimmed, { annotations: newAnnotations }];
-        });
-        setHistoryIndex(prev => prev + 1);
-    }, [historyIndex]);
-
-    const undo = useCallback(() => {
-        if (historyIndex <= 0) return;
-        const newIdx = historyIndex - 1;
-        setHistoryIndex(newIdx);
-        setAnnotations(history[newIdx].annotations);
-    }, [historyIndex, history]);
-
-    const redo = useCallback(() => {
-        if (historyIndex >= history.length - 1) return;
-        const newIdx = historyIndex + 1;
-        setHistoryIndex(newIdx);
-        setAnnotations(history[newIdx].annotations);
-    }, [historyIndex, history]);
-
-    /* ---- keyboard shortcuts ---- */
+    // Re-render all pages on zoom change (after initial load)
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-            if (e.key === 'v' || e.key === 'V') setActiveTool('select');
-            else if (e.key === 't' || e.key === 'T') setActiveTool('text');
-            else if (e.key === 'i' || e.key === 'I') setActiveTool('image');
-            else if (e.key === 'r' || e.key === 'R') setActiveTool('redact');
-            else if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
-            else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
-            else if (e.key === 'Delete' && selectedId) {
-                removeAnnotation(selectedId);
+        if (!file) return;
+        (async () => {
+            for (let i = 0; i < file.pageCount; i++) {
+                await renderPage(i);
             }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [undo, redo, selectedId]);
+        })();
+    }, [dpi]); // eslint-disable-line
 
+    // Fetch annotations when active page changes
+    useEffect(() => {
+        if (!file) return;
+        mupdf.getAnnotations(currentPage).then(result => {
+            setPageAnnotations(result.annotations);
+            setSelectedAnnotIndex(null);
+        }).catch(() => {});
+        // Reset drawing state when switching pages
+        setIsDrawing(false);
+        setDrawStart(null);
+        setDrawCurrent(null);
+        setInkPoints([]);
+        setDragMode(null);
+        dragStateRef.current = null;
+        setDragPreviewPdfRect(null);
+        setHoverCursor(null);
+    }, [currentPage, file?.name]); // eslint-disable-line
+
+    /* ---- Cleanup ---- */
     const removeFile = useCallback(() => {
         setFile(null);
-        pdfDocRef.current?.destroy();
-        pdfDocRef.current = null;
-        annotations.forEach(a => {
-            if (a.type === 'image') URL.revokeObjectURL(a.previewUrl);
-        });
-        setAnnotations([]);
-    }, [annotations]);
+        renderedUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+        renderedUrlsRef.current.clear();
+        setRenderedPages(new Map());
+        setRenderingPages(new Set());
+        setPageAnnotations([]);
+        setHasChanges(false);
+        setSelectedAnnotIndex(null);
+        mupdf.close().catch(() => { });
+    }, [mupdf]);
 
-    /* ---- annotation operations ---- */
-    const addAnnotation = (ann: Annotation) => {
-        const newAnns = [...annotations, ann];
-        setAnnotations(newAnns);
-        pushHistory(newAnns);
-    };
+    useEffect(() => {
+        return () => {
+            renderedUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, []);
 
-    const updateAnnotation = (id: string, updates: Partial<Annotation>) => {
-        const newAnns = annotations.map(a => a.id === id ? { ...a, ...updates } as Annotation : a);
-        setAnnotations(newAnns);
-    };
+    /* ---- Page dimensions ---- */
+    const activePageInfo = file?.pages[currentPage];
+    const scale = dpi / 72;
+    const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    const activeRendered = renderedPages.get(currentPage);
+    const renderWidth = activeRendered?.w ?? (activePageInfo ? Math.round(activePageInfo.width * scale) : 0);
+    const renderHeight = activeRendered?.h ?? (activePageInfo ? Math.round(activePageInfo.height * scale) : 0);
+    const displayWidth = Math.round(renderWidth / dpr);
+    const displayHeight = Math.round(renderHeight / dpr);
+    const pageHeight = activePageInfo?.height || 0;
 
-    const removeAnnotation = (id: string) => {
-        const ann = annotations.find(a => a.id === id);
-        if (ann?.type === 'image') URL.revokeObjectURL((ann as ImageAnnotation).previewUrl);
-        const newAnns = annotations.filter(a => a.id !== id);
-        setAnnotations(newAnns);
-        pushHistory(newAnns);
-        if (selectedId === id) setSelectedId(null);
-    };
+    /* ---- Derived hex color for canvas drawing ---- */
+    const hexColor = useMemo(() => {
+        return '#' + [properties.r, properties.g, properties.b]
+            .map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+    }, [properties.r, properties.g, properties.b]);
 
-    /* ---- canvas interaction handlers ---- */
-    const handleCanvasClick = (e: React.MouseEvent) => {
-        if (!overlayRef.current) return;
-        const rect = overlayRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        if (activeTool === 'text') {
-            const ann: TextAnnotation = {
-                id: crypto.randomUUID(),
-                type: 'text',
-                pageIndex: currentPage,
-                x, y,
-                text: 'Edit me',
-                fontSize: textFontSize,
-                fontName: textFont,
-                color: textColor,
-            };
-            addAnnotation(ann);
-            setSelectedId(ann.id);
-        } else if (activeTool === 'image') {
-            imageInputRef.current?.click();
-        } else if (activeTool === 'select') {
-            setSelectedId(null);
+    /* ---- Annotation operations ---- */
+    const addAnnotationAndRefresh = useCallback(async (params: AddAnnotationParams) => {
+        try {
+            await mupdf.addAnnotation(params);
+            setHasChanges(true);
+            await refreshCurrentPage();
+        } catch (err) {
+            console.error('Failed to add annotation:', err);
         }
+    }, [mupdf, refreshCurrentPage]);
+
+    const deleteAnnotationAndRefresh = useCallback(async (annotIndex: number) => {
+        try {
+            await mupdf.deleteAnnotation(currentPage, annotIndex);
+            setHasChanges(true);
+            setSelectedAnnotIndex(null);
+            await refreshCurrentPage();
+        } catch (err) {
+            console.error('Failed to delete annotation:', err);
+        }
+    }, [mupdf, currentPage, refreshCurrentPage]);
+
+    const updateAnnotationAndRefresh = useCallback(async (
+        annotIndex: number,
+        updates: { color?: number[]; opacity?: number; contents?: string }
+    ) => {
+        try {
+            await mupdf.updateAnnotation({ pageIndex: currentPage, annotIndex, ...updates });
+            setHasChanges(true);
+            await refreshCurrentPage();
+        } catch (err) {
+            console.error('Failed to update annotation:', err);
+        }
+    }, [mupdf, currentPage, refreshCurrentPage]);
+
+    /* ---- Draw overlay ---- */
+    const drawOverlay = useCallback(() => {
+        const canvas = overlayCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = renderWidth;
+        canvas.height = renderHeight;
+        ctx.clearRect(0, 0, renderWidth, renderHeight);
+
+        // Drag preview (shown while dragging instead of static selection)
+        if (dragPreviewPdfRect) {
+            const tl = pdfToScreen(dragPreviewPdfRect[0], dragPreviewPdfRect[1], pageHeight, scale);
+            const br = pdfToScreen(dragPreviewPdfRect[2], dragPreviewPdfRect[3], pageHeight, scale);
+            ctx.save();
+            ctx.strokeStyle = '#3A76F0';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+            ctx.setLineDash([]);
+            ctx.restore();
+        } else if (selectedAnnotIndex !== null && pageAnnotations[selectedAnnotIndex]) {
+            // Static selection handles
+            const r = pageAnnotations[selectedAnnotIndex].rect;
+            const tl = pdfToScreen(r[0], r[1], pageHeight, scale);
+            const br = pdfToScreen(r[2], r[3], pageHeight, scale);
+            ctx.save();
+            ctx.strokeStyle = '#3A76F0';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+            ctx.setLineDash([]);
+            const hs = 5;
+            ctx.fillStyle = '#3A76F0';
+            [[tl.x, tl.y], [br.x, tl.y], [tl.x, br.y], [br.x, br.y]].forEach(([hx, hy]) => {
+                ctx.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
+            });
+            ctx.restore();
+        }
+
+        // Drawing feedback
+        if (isDrawing && drawStart && drawCurrent) {
+            const x = Math.min(drawStart.x, drawCurrent.x);
+            const y = Math.min(drawStart.y, drawCurrent.y);
+            const w = Math.abs(drawCurrent.x - drawStart.x);
+            const h = Math.abs(drawCurrent.y - drawStart.y);
+
+            if (activeTool === 'freetext') {
+                ctx.strokeStyle = '#3A76F0';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 4]);
+                ctx.strokeRect(x, y, w, h);
+                ctx.setLineDash([]);
+            } else if (activeTool === 'redact') {
+                ctx.fillStyle = '#dc262640';
+                ctx.strokeStyle = '#dc2626';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 3]);
+                ctx.fillRect(x, y, w, h);
+                ctx.strokeRect(x, y, w, h);
+                ctx.setLineDash([]);
+            } else if (['highlight', 'underline', 'strikethrough'].includes(activeTool)) {
+                ctx.fillStyle = hexColor + '44';
+                ctx.strokeStyle = hexColor;
+                ctx.lineWidth = 1;
+                ctx.fillRect(x, y, w, h);
+                ctx.strokeRect(x, y, w, h);
+            } else if (activeTool === 'rectangle') {
+                ctx.strokeStyle = hexColor;
+                ctx.lineWidth = properties.borderWidth;
+                ctx.strokeRect(x, y, w, h);
+            } else if (activeTool === 'circle') {
+                ctx.strokeStyle = hexColor;
+                ctx.lineWidth = properties.borderWidth;
+                ctx.beginPath();
+                ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        // Line / arrow preview
+        if (isDrawing && drawStart && drawCurrent && (activeTool === 'line' || activeTool === 'arrow')) {
+            ctx.strokeStyle = hexColor;
+            ctx.lineWidth = properties.borderWidth;
+            ctx.beginPath();
+            ctx.moveTo(drawStart.x, drawStart.y);
+            ctx.lineTo(drawCurrent.x, drawCurrent.y);
+            ctx.stroke();
+
+            if (activeTool === 'arrow') {
+                const angle = Math.atan2(drawCurrent.y - drawStart.y, drawCurrent.x - drawStart.x);
+                const hl = 12;
+                ctx.beginPath();
+                ctx.moveTo(drawCurrent.x, drawCurrent.y);
+                ctx.lineTo(drawCurrent.x - hl * Math.cos(angle - Math.PI / 6), drawCurrent.y - hl * Math.sin(angle - Math.PI / 6));
+                ctx.moveTo(drawCurrent.x, drawCurrent.y);
+                ctx.lineTo(drawCurrent.x - hl * Math.cos(angle + Math.PI / 6), drawCurrent.y - hl * Math.sin(angle + Math.PI / 6));
+                ctx.stroke();
+            }
+        }
+
+        // Freehand path
+        if (inkPoints.length > 1) {
+            ctx.strokeStyle = hexColor;
+            ctx.lineWidth = properties.borderWidth;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(inkPoints[0][0], inkPoints[0][1]);
+            for (let i = 1; i < inkPoints.length; i++) ctx.lineTo(inkPoints[i][0], inkPoints[i][1]);
+            ctx.stroke();
+        }
+    }, [renderWidth, renderHeight, isDrawing, drawStart, drawCurrent, inkPoints, activeTool, hexColor, properties.borderWidth, selectedAnnotIndex, pageAnnotations, pageHeight, scale, dragPreviewPdfRect]);
+
+    useEffect(() => { drawOverlay(); }, [drawOverlay]);
+
+    /* ---- Mouse helpers ---- */
+    const getCanvasCoords = (e: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null => {
+        const canvas = overlayCanvasRef.current;
+        if (!canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0]?.clientY ?? 0 : e.clientY;
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY,
+        };
     };
 
-    // Redact drawing
+    /* ---- Mouse handlers ---- */
+
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (activeTool !== 'redact' || !overlayRef.current) return;
-        const rect = overlayRef.current.getBoundingClientRect();
-        setIsDrawing(true);
-        setDrawStart({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-        setCurrentDraw({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    };
+        const coords = getCanvasCoords(e);
+        if (!coords) return;
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!overlayRef.current) return;
-        const rect = overlayRef.current.getBoundingClientRect();
+        setMobilePanelCollapsed(true);
+        if (textEditState) return; // let overlay handle input
 
-        if (isDrawing && activeTool === 'redact') {
-            setCurrentDraw({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        if (activeTool === 'select') {
+            const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+
+            // Check corner handles and body of selected annotation for drag/resize
+            if (selectedAnnotIndex !== null && pageAnnotations[selectedAnnotIndex]) {
+                const r = pageAnnotations[selectedAnnotIndex].rect;
+                const tl = pdfToScreen(r[0], r[1], pageHeight, scale);
+                const br = pdfToScreen(r[2], r[3], pageHeight, scale);
+
+                const corners: Array<[DragMode, number, number]> = [
+                    ['resize-tl', tl.x, tl.y],
+                    ['resize-tr', br.x, tl.y],
+                    ['resize-bl', tl.x, br.y],
+                    ['resize-br', br.x, br.y],
+                ];
+
+                for (const [mode, cx, cy] of corners) {
+                    if (Math.abs(coords.x - cx) <= HANDLE_HIT_PX && Math.abs(coords.y - cy) <= HANDLE_HIT_PX) {
+                        setDragMode(mode);
+                        dragStateRef.current = { startX: coords.x, startY: coords.y, origRect: [...r] };
+                        mupdf.getAnnotationGeometry(currentPage, selectedAnnotIndex).then(geo => {
+                            if (dragStateRef.current) {
+                                dragStateRef.current.origLinePoints = geo.linePoints;
+                                dragStateRef.current.origInkList = geo.inkList;
+                                dragStateRef.current.origQuadPoints = geo.quadPoints;
+                            }
+                        }).catch(() => { });
+                        return;
+                    }
+                }
+
+                // Body drag — move
+                if (p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]) {
+                    setDragMode('move');
+                    dragStateRef.current = { startX: coords.x, startY: coords.y, origRect: [...r] };
+                    mupdf.getAnnotationGeometry(currentPage, selectedAnnotIndex).then(geo => {
+                        if (dragStateRef.current) {
+                            dragStateRef.current.origLinePoints = geo.linePoints;
+                            dragStateRef.current.origInkList = geo.inkList;
+                            dragStateRef.current.origQuadPoints = geo.quadPoints;
+                        }
+                    }).catch(() => { });
+                    return;
+                }
+            }
+
+            // Hit test all annotations for selection
+            let found = false;
+            for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+                const r = pageAnnotations[i].rect;
+                if (p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]) {
+                    setSelectedAnnotIndex(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) setSelectedAnnotIndex(null);
             return;
         }
 
-        if (isDragging && selectedId) {
-            const x = e.clientX - rect.left - dragOffset.x;
-            const y = e.clientY - rect.top - dragOffset.y;
-            updateAnnotation(selectedId, { x, y });
+        if (activeTool === 'eraser') { handleEraserClick(coords); return; }
+        if (activeTool === 'freetext') {
+            // Start drag to define text area
+            freeTextDragStartClientRef.current = { x: e.clientX, y: e.clientY };
+            setIsDrawing(true);
+            setDrawStart(coords);
+            setDrawCurrent(coords);
+            return;
+        }
+        if (activeTool === 'sticky-note') { handleStickyNoteClick(coords); return; }
+        if (activeTool === 'stamp') { handleStampClick(coords); return; }
+        if (activeTool === 'image-stamp') { handleImageStampClick(coords); return; }
+
+        setIsDrawing(true);
+        setDrawStart(coords);
+        setDrawCurrent(coords);
+        if (activeTool === 'freehand') setInkPoints([[coords.x, coords.y]]);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        const coords = getCanvasCoords(e);
+        if (!coords) return;
+
+        // Handle drag/resize
+        if (dragMode && dragStateRef.current && selectedAnnotIndex !== null) {
+            const ds = dragStateRef.current;
+            const dx = (coords.x - ds.startX) / scale;
+            const dy = (coords.y - ds.startY) / scale;
+            const orig = ds.origRect;
+
+            let newRect: number[];
+            if (dragMode === 'move') {
+                newRect = [orig[0] + dx, orig[1] + dy, orig[2] + dx, orig[3] + dy];
+            } else if (dragMode === 'resize-tl') {
+                newRect = [orig[0] + dx, orig[1] + dy, orig[2], orig[3]];
+            } else if (dragMode === 'resize-tr') {
+                newRect = [orig[0], orig[1] + dy, orig[2] + dx, orig[3]];
+            } else if (dragMode === 'resize-bl') {
+                newRect = [orig[0] + dx, orig[1], orig[2], orig[3] + dy];
+            } else {
+                newRect = [orig[0], orig[1], orig[2] + dx, orig[3] + dy]; // resize-br
+            }
+            setDragPreviewPdfRect(newRect);
+            return;
+        }
+
+        // Update hover cursor for select tool
+        if (activeTool === 'select' && selectedAnnotIndex !== null && pageAnnotations[selectedAnnotIndex]) {
+            const r = pageAnnotations[selectedAnnotIndex].rect;
+            const tl = pdfToScreen(r[0], r[1], pageHeight, scale);
+            const br = pdfToScreen(r[2], r[3], pageHeight, scale);
+            const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+
+            const onHandle = [[tl.x, tl.y], [br.x, tl.y], [tl.x, br.y], [br.x, br.y]]
+                .some(([cx, cy]) => Math.abs(coords.x - cx) <= HANDLE_HIT_PX && Math.abs(coords.y - cy) <= HANDLE_HIT_PX);
+
+            if (onHandle) {
+                setHoverCursor('resize');
+            } else if (p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]) {
+                setHoverCursor('move');
+            } else {
+                setHoverCursor(null);
+            }
+        } else if (activeTool === 'select') {
+            setHoverCursor(null);
+        }
+
+        if (!isDrawing) return;
+        setDrawCurrent(coords);
+        if (activeTool === 'freehand') setInkPoints(prev => [...prev, [coords.x, coords.y]]);
+    };
+
+    const handleMouseUp = async () => {
+        // Finalize drag/resize
+        if (dragMode && dragStateRef.current && selectedAnnotIndex !== null && dragPreviewPdfRect) {
+            const finalRect = dragPreviewPdfRect;
+            const ds = dragStateRef.current;
+            const capturedDragMode = dragMode;
+            const savedIndex = selectedAnnotIndex;
+
+            setDragMode(null);
+            setDragPreviewPdfRect(null);
+            dragStateRef.current = null;
+
+            try {
+                const updates: Parameters<typeof mupdf.updateAnnotation>[0] = {
+                    pageIndex: currentPage,
+                    annotIndex: savedIndex,
+                    rect: finalRect,
+                };
+
+                if (capturedDragMode === 'move') {
+                    const dx = finalRect[0] - ds.origRect[0];
+                    const dy = finalRect[1] - ds.origRect[1];
+
+                    if (ds.origLinePoints && ds.origLinePoints.length >= 4) {
+                        updates.linePoints = [
+                            ds.origLinePoints[0] + dx, ds.origLinePoints[1] + dy,
+                            ds.origLinePoints[2] + dx, ds.origLinePoints[3] + dy,
+                        ];
+                    }
+                    if (ds.origInkList) {
+                        updates.inkList = ds.origInkList.map(stroke =>
+                            stroke.map(pt => [pt[0] + dx, pt[1] + dy])
+                        );
+                    }
+                    if (ds.origQuadPoints) {
+                        updates.quadPoints = ds.origQuadPoints.map(quad => {
+                            const result = [...quad];
+                            for (let i = 0; i < result.length; i += 2) {
+                                result[i] += dx;
+                                result[i + 1] += dy;
+                            }
+                            return result;
+                        });
+                    }
+                }
+
+                await mupdf.updateAnnotation(updates);
+                setHasChanges(true);
+                await refreshCurrentPage();
+            } catch (err) {
+                console.error('Failed to update annotation geometry:', err);
+            }
+            return;
+        }
+
+        // Clear any incomplete drag
+        if (dragMode) {
+            setDragMode(null);
+            setDragPreviewPdfRect(null);
+            dragStateRef.current = null;
+            return;
+        }
+
+        // Drawing tools
+        if (!isDrawing || !drawStart || !drawCurrent) { setIsDrawing(false); return; }
+
+        const s = drawStart;
+        const c = drawCurrent;
+        setIsDrawing(false);
+        setDrawStart(null);
+        setDrawCurrent(null);
+
+        if (activeTool === 'freetext') {
+            handleFreeTextClick(s, c);
+        } else if (['highlight', 'underline', 'strikethrough'].includes(activeTool)) {
+            await handleMarkupDone(s, c);
+        } else if (activeTool === 'rectangle') {
+            await handleShapeDone('Square', s, c);
+        } else if (activeTool === 'circle') {
+            await handleShapeDone('Circle', s, c);
+        } else if (activeTool === 'line') {
+            await handleLineDone(s, c, false);
+        } else if (activeTool === 'arrow') {
+            await handleLineDone(s, c, true);
+        } else if (activeTool === 'redact') {
+            await handleRedactDone(s, c);
+        } else if (activeTool === 'freehand') {
+            await handleInkDone();
         }
     };
 
-    const handleMouseUp = () => {
-        if (isDrawing && drawStart && currentDraw && activeTool === 'redact') {
-            const x = Math.min(drawStart.x, currentDraw.x);
-            const y = Math.min(drawStart.y, currentDraw.y);
-            const w = Math.abs(currentDraw.x - drawStart.x);
-            const h = Math.abs(currentDraw.y - drawStart.y);
+    /* ---- Tool handlers ---- */
 
-            if (w > 5 && h > 5) {
-                const ann: RedactAnnotation = {
-                    id: crypto.randomUUID(),
-                    type: 'redact',
-                    pageIndex: currentPage,
-                    x, y, width: w, height: h,
-                    color: redactColor,
-                };
-                addAnnotation(ann);
+    const handleMarkupDone = async (start: { x: number; y: number }, end: { x: number; y: number }) => {
+        const rect: Rect = {
+            x: Math.min(start.x, end.x), y: Math.min(start.y, end.y),
+            width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y),
+        };
+        if (rect.width < 5 || rect.height < 5) return;
+
+        const pdfRect = screenRectToPdfRect(rect, pageHeight, scale);
+        const typeMap: Record<string, string> = {
+            highlight: 'Highlight', underline: 'Underline', strikethrough: 'StrikeOut',
+        };
+
+        const quad = [
+            pdfRect.x, pdfRect.y,
+            pdfRect.x + pdfRect.width, pdfRect.y,
+            pdfRect.x, pdfRect.y + pdfRect.height,
+            pdfRect.x + pdfRect.width, pdfRect.y + pdfRect.height,
+        ];
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: typeMap[activeTool] as any,
+            color: rgb01(properties.r, properties.g, properties.b),
+            opacity: properties.opacity,
+            quadPoints: [quad],
+        });
+    };
+
+    const handleShapeDone = async (type: 'Square' | 'Circle', start: { x: number; y: number }, end: { x: number; y: number }) => {
+        const rect: Rect = {
+            x: Math.min(start.x, end.x), y: Math.min(start.y, end.y),
+            width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y),
+        };
+        if (rect.width < 5 || rect.height < 5) return;
+
+        const pdfRect = screenRectToPdfRect(rect, pageHeight, scale);
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage, type,
+            rect: [pdfRect.x, pdfRect.y, pdfRect.x + pdfRect.width, pdfRect.y + pdfRect.height],
+            color: rgb01(properties.r, properties.g, properties.b),
+            borderWidth: properties.borderWidth,
+        });
+    };
+
+    const handleLineDone = async (start: { x: number; y: number }, end: { x: number; y: number }, isArrow: boolean) => {
+        if (Math.hypot(end.x - start.x, end.y - start.y) < 5) return;
+
+        const p1 = screenToPdf(start.x, start.y, pageHeight, scale);
+        const p2 = screenToPdf(end.x, end.y, pageHeight, scale);
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Line',
+            color: rgb01(properties.r, properties.g, properties.b),
+            borderWidth: properties.borderWidth,
+            linePoints: [p1.x, p1.y, p2.x, p2.y],
+            lineEndingEnd: isArrow ? 'ClosedArrow' : 'None',
+        });
+    };
+
+    const handleRedactDone = async (start: { x: number; y: number }, end: { x: number; y: number }) => {
+        const rect: Rect = {
+            x: Math.min(start.x, end.x), y: Math.min(start.y, end.y),
+            width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y),
+        };
+        if (rect.width < 5 || rect.height < 5) return;
+
+        const pdfRect = screenRectToPdfRect(rect, pageHeight, scale);
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Redact',
+            rect: [pdfRect.x, pdfRect.y, pdfRect.x + pdfRect.width, pdfRect.y + pdfRect.height],
+            color: rgb01(properties.r, properties.g, properties.b),
+        });
+    };
+
+    const handleInkDone = async () => {
+        if (inkPoints.length < 2) { setInkPoints([]); return; }
+
+        const pdfPoints = inkPoints.map(([x, y]) => {
+            const p = screenToPdf(x, y, pageHeight, scale);
+            return [p.x, p.y] as [number, number];
+        });
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Ink',
+            color: rgb01(properties.r, properties.g, properties.b),
+            borderWidth: properties.borderWidth,
+            inkList: [pdfPoints],
+        });
+
+        setInkPoints([]);
+    };
+
+    const handleFreeTextClick = (
+        start: { x: number; y: number },
+        end: { x: number; y: number },
+    ) => {
+        const pageDivEl = activePageDivRef.current;
+        if (!pageDivEl) return;
+        const pageRect = pageDivEl.getBoundingClientRect();
+
+        // Use drag start client coords for overlay position
+        const startClient = freeTextDragStartClientRef.current;
+        const cssX = startClient ? startClient.x - pageRect.left : start.x / dpr;
+        const cssY = startClient ? startClient.y - pageRect.top : start.y / dpr;
+        freeTextDragStartClientRef.current = null;
+
+        // If drag was intentional (>15px), use drag width; otherwise default
+        const dragWidthCss = Math.abs(end.x - start.x) / dpr;
+        const boxWidth = dragWidthCss > 15 ? dragWidthCss : undefined;
+
+        const p = screenToPdf(start.x, start.y, pageHeight, scale);
+        setTextEditState({
+            cssX,
+            cssY,
+            boxWidth,
+            pdfX: p.x,
+            pdfY: p.y,
+            pageIdx: currentPage,
+        });
+    };
+
+    const handleTextEditCommit = useCallback(async (text: string, opts: TextCommitOptions) => {
+        if (!textEditState) return;
+        const saved = textEditState;
+        setTextEditState(null);
+
+        // Remove old annotation when re-editing
+        if (saved.annotIndex !== undefined) {
+            await mupdf.deleteAnnotation(saved.pageIdx, saved.annotIndex);
+        }
+
+        const { pdfX, pdfY, pageIdx, boxWidth } = saved;
+        // Width: from drag (CSS px → PDF pts) or estimate from text length
+        const pdfW = boxWidth
+            ? boxWidth / zoom
+            : Math.max(40, text.length * opts.fontSize * 0.6);
+        const pdfH = opts.fontSize * 2;
+
+        try {
+            await mupdf.addAnnotation({
+                pageIndex: pageIdx,
+                type: 'FreeText',
+                rect: [pdfX, pdfY, pdfX + pdfW, pdfY + pdfH],
+                textColor: opts.textColor,
+                transparent: true,
+                contents: text,
+                fontSize: opts.fontSize,
+                fontName: opts.fontName,
+            });
+            setHasChanges(true);
+            await refreshCurrentPage();
+        } catch (err) {
+            console.error('Failed to add text annotation:', err);
+        }
+    }, [textEditState, mupdf, zoom, refreshCurrentPage]);
+
+    const handleTextEditCancel = useCallback(() => {
+        setTextEditState(null);
+    }, []);
+
+    const handleStickyNoteClick = async (coords: { x: number; y: number }) => {
+        const text = properties.text.trim();
+        if (!text) return;
+
+        const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Text',
+            rect: [p.x, p.y, p.x + 24, p.y + 24],
+            color: rgb01(properties.r, properties.g, properties.b),
+            contents: text,
+        });
+    };
+
+    const handleStampClick = async (coords: { x: number; y: number }) => {
+        if (!selectedStamp) { setShowStampPicker(true); return; }
+
+        const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+        const w = selectedStamp.label.length * 10 + 40;
+        const h = 30;
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Stamp',
+            rect: [p.x, p.y, p.x + w, p.y + h],
+            contents: selectedStamp.label,
+            color: hexToRgb01(selectedStamp.color),
+            iconName: STAMP_ICON_MAP[selectedStamp.label],
+        });
+    };
+
+    const handleImageStampClick = async (coords: { x: number; y: number }) => {
+        if (!pendingImage) { imageInputRef.current?.click(); return; }
+
+        const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+        const maxDim = 200;
+        const ratio = pendingImage.height / pendingImage.width;
+        const w = Math.min(maxDim, pendingImage.width);
+        const h = w * ratio;
+
+        await addAnnotationAndRefresh({
+            pageIndex: currentPage,
+            type: 'Stamp',
+            rect: [p.x, p.y, p.x + w, p.y + h],
+            imageData: pendingImage.data,
+        });
+    };
+
+    const handleDoubleClick = (e: React.MouseEvent) => {
+        if (activeTool !== 'select' && activeTool !== 'freetext') return;
+        const coords = getCanvasCoords(e);
+        if (!coords) return;
+        const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+
+        for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+            const annot = pageAnnotations[i];
+            if (annot.type !== 'FreeText') continue;
+            const r = annot.rect;
+            if (p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]) {
+                if (!activePageDivRef.current) return;
+                const tl = pdfToScreen(r[0], r[1], pageHeight, scale);
+                const cssX = tl.x / dpr;
+                const cssY = tl.y / dpr;
+                setTextEditState({
+                    cssX,
+                    cssY,
+                    pdfX: r[0],
+                    pdfY: r[1],
+                    pageIdx: currentPage,
+                    annotIndex: i,
+                    initialText: annot.contents || '',
+                });
+                break;
             }
         }
+    };
 
-        if (isDragging && selectedId) {
-            pushHistory(annotations);
+    const handleEraserClick = async (coords: { x: number; y: number }) => {
+        const p = screenToPdf(coords.x, coords.y, pageHeight, scale);
+        for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+            const r = pageAnnotations[i].rect;
+            if (p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]) {
+                await deleteAnnotationAndRefresh(i);
+                return;
+            }
         }
-
-        setIsDrawing(false);
-        setDrawStart(null);
-        setCurrentDraw(null);
-        setIsDragging(false);
     };
 
     // Image upload
@@ -368,9 +985,7 @@ export default function PDFEditorPage() {
         const imageFile = e.target.files?.[0];
         if (!imageFile) return;
 
-        const isJpg = imageFile.type === 'image/jpeg';
-        const isPng = imageFile.type === 'image/png';
-        if (!isJpg && !isPng) {
+        if (!['image/png', 'image/jpeg'].includes(imageFile.type)) {
             alert('Only PNG and JPEG images are supported.');
             return;
         }
@@ -380,697 +995,395 @@ export default function PDFEditorPage() {
         const url = URL.createObjectURL(imageFile);
         img.src = url;
         await new Promise(resolve => { img.onload = resolve; });
+        URL.revokeObjectURL(url);
 
-        const displayWidth = Math.min(200, img.naturalWidth);
-        const scaleRatio = displayWidth / img.naturalWidth;
-        const displayHeight = img.naturalHeight * scaleRatio;
+        setPendingImage({
+            data: arrayBuffer,
+            name: imageFile.name,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+        });
 
-        const ann: ImageAnnotation = {
-            id: crypto.randomUUID(),
-            type: 'image',
-            pageIndex: currentPage,
-            x: 50, y: 50,
-            width: displayWidth,
-            height: displayHeight,
-            imageData: arrayBuffer,
-            imageType: isJpg ? 'jpg' : 'png',
-            naturalWidth: img.naturalWidth,
-            naturalHeight: img.naturalHeight,
-            previewUrl: url,
-            opacity: 1,
-        };
-
-        addAnnotation(ann);
-        setSelectedId(ann.id);
         e.target.value = '';
-    }, [currentPage, annotations, pushHistory]);
+    }, []);
 
-    // Image drag start
-    const handleAnnotationMouseDown = (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
-        if (activeTool !== 'select') return;
-        const ann = annotations.find(a => a.id === id);
-        if (!ann) return;
-        setSelectedId(id);
-        setIsDragging(true);
-        const parentRect = overlayRef.current?.getBoundingClientRect();
-        if (parentRect) {
-            setDragOffset({
-                x: e.clientX - parentRect.left - ann.x,
-                y: e.clientY - parentRect.top - ann.y,
-            });
-        }
-    };
+    /* ---- Keyboard shortcuts ---- */
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            if ((e.target as HTMLElement).isContentEditable) return;
 
-    /* ---- save ---- */
-    const handleSave = async () => {
+            const key = e.key.toLowerCase();
+            if (key === 'v') setActiveTool('select');
+            else if (key === 'h') setActiveTool('highlight');
+            else if (key === 'u') setActiveTool('underline');
+            else if (key === 's' && !e.ctrlKey) setActiveTool('strikethrough');
+            else if (key === 'd') setActiveTool('freehand');
+            else if (key === 't') setActiveTool('freetext');
+            else if (key === 'n') setActiveTool('sticky-note');
+            else if (key === 'p') setActiveTool('stamp');
+            else if (key === 'i') setActiveTool('image-stamp');
+            else if (key === 'x') setActiveTool('redact');
+            else if (key === 'e') setActiveTool('eraser');
+            else if (key === '1') setActiveTool('rectangle');
+            else if (key === '2') setActiveTool('circle');
+            else if (key === '3') setActiveTool('line');
+            else if (key === '4') setActiveTool('arrow');
+            else if ((key === 'delete' || key === 'backspace') && selectedAnnotIndexRef.current !== null) {
+                const idx = selectedAnnotIndexRef.current;
+                deleteAnnotationAndRefresh(idx);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [deleteAnnotationAndRefresh]);
+
+    /* ---- Save / Download ---- */
+    const handleSave = useCallback(async () => {
         if (!file) return;
         setIsProcessing(true);
-
         try {
-            const buf = await file.file.arrayBuffer();
-            const bufCopy1 = buf.slice(0);
-            const bufCopy2 = buf.slice(0);
-
-            // Group annotations by page
-            const annotsByPage = new Map<number, Annotation[]>();
-            for (const ann of annotations) {
-                const list = annotsByPage.get(ann.pageIndex) || [];
-                list.push(ann);
-                annotsByPage.set(ann.pageIndex, list);
+            // Auto-apply any redactions on current page before saving
+            if (pageAnnotations.some(a => a.type === 'Redact')) {
+                await mupdf.applyRedactions(currentPage);
             }
-
-            // Check which pages have redact annotations (need rasterization)
-            const redactPages = new Set<number>();
-            for (const [pageIdx, anns] of annotsByPage) {
-                if (anns.some(a => a.type === 'redact')) redactPages.add(pageIdx);
-            }
-
-            // Load pdfjs for rasterization
-            const pdfjs = await import('pdfjs-dist');
-            if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
-            }
-            const pdfjsDoc = await pdfjs.getDocument({ data: new Uint8Array(bufCopy1) }).promise;
-
-            const srcDoc = await PDFDocument.load(bufCopy2);
-            const outDoc = await PDFDocument.create();
-            const totalPages = srcDoc.getPageCount();
-
-            const hexToRgb = (hex: string) => {
-                const r = parseInt(hex.slice(1, 3), 16) / 255;
-                const g = parseInt(hex.slice(3, 5), 16) / 255;
-                const b = parseInt(hex.slice(5, 7), 16) / 255;
-                return rgb(r, g, b);
-            };
-
-            const RENDER_SCALE = 2;
-            const fontCache = new Map();
-
-            for (let i = 0; i < totalPages; i++) {
-                const pageAnns = annotsByPage.get(i) || [];
-                const srcPage = srcDoc.getPages()[i];
-                const { width: origW, height: origH } = srcPage.getSize();
-
-                if (redactPages.has(i)) {
-                    // ---- RASTERIZE: render page + ALL annotations onto canvas ----
-                    const pjPage = await pdfjsDoc.getPage(i + 1);
-                    const viewport = pjPage.getViewport({ scale: RENDER_SCALE });
-
-                    const offscreen = document.createElement('canvas');
-                    offscreen.width = viewport.width;
-                    offscreen.height = viewport.height;
-                    const ctx = offscreen.getContext('2d')!;
-
-                    // Render original page content
-                    await pjPage.render({ canvasContext: ctx, viewport }).promise;
-
-                    const ratio = RENDER_SCALE / zoom;
-
-                    // Draw all annotations on this page onto the canvas
-                    for (const ann of pageAnns) {
-                        if (ann.type === 'redact') {
-                            ctx.fillStyle = ann.color;
-                            ctx.fillRect(ann.x * ratio, ann.y * ratio, ann.width * ratio, ann.height * ratio);
-                        } else if (ann.type === 'text') {
-                            ctx.fillStyle = ann.color;
-                            const family = ann.fontName.includes('Courier') ? 'monospace' :
-                                ann.fontName.includes('Times') ? 'serif' : 'sans-serif';
-                            const weight = ann.fontName.includes('Bold') ? 'bold' : 'normal';
-                            ctx.font = `${weight} ${ann.fontSize * (RENDER_SCALE / zoom)}px ${family}`;
-                            ctx.fillText(ann.text, ann.x * ratio, ann.y * ratio);
-                        } else if (ann.type === 'image') {
-                            const img = new Image();
-                            img.src = ann.previewUrl;
-                            await new Promise(resolve => { img.onload = resolve; });
-                            ctx.globalAlpha = ann.opacity;
-                            ctx.drawImage(img, ann.x * ratio, ann.y * ratio, ann.width * ratio, ann.height * ratio);
-                            ctx.globalAlpha = 1;
-                        }
-                    }
-
-                    // Convert canvas to PNG and embed as flat page
-                    const pngDataUrl = offscreen.toDataURL('image/png');
-                    const pngBase64 = pngDataUrl.split(',')[1];
-                    const pngBytes = Uint8Array.from(atob(pngBase64), c => c.charCodeAt(0));
-
-                    const pngImage = await outDoc.embedPng(pngBytes);
-                    const newPage = outDoc.addPage([origW, origH]);
-                    newPage.drawImage(pngImage, { x: 0, y: 0, width: origW, height: origH });
-
-                } else if (pageAnns.length > 0) {
-                    // ---- NO REDACTION: use pdf-lib directly (preserves text/vectors) ----
-                    const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
-                    outDoc.addPage(copiedPage);
-                    const outPage = outDoc.getPages()[outDoc.getPageCount() - 1];
-
-                    for (const ann of pageAnns) {
-                        if (ann.type === 'text') {
-                            const stdFont = fontNameMap[ann.fontName] || StandardFonts.Helvetica;
-                            if (!fontCache.has(ann.fontName)) {
-                                fontCache.set(ann.fontName, await outDoc.embedFont(stdFont));
-                            }
-                            outPage.drawText(ann.text, {
-                                x: ann.x / zoom,
-                                y: origH - ann.y / zoom,
-                                size: ann.fontSize,
-                                font: fontCache.get(ann.fontName),
-                                color: hexToRgb(ann.color),
-                            });
-                        } else if (ann.type === 'image') {
-                            const embeddedImage = ann.imageType === 'png'
-                                ? await outDoc.embedPng(ann.imageData)
-                                : await outDoc.embedJpg(ann.imageData);
-                            const pdfW = ann.width / zoom;
-                            const pdfH = ann.height / zoom;
-                            outPage.drawImage(embeddedImage, {
-                                x: ann.x / zoom,
-                                y: origH - ann.y / zoom - pdfH,
-                                width: pdfW,
-                                height: pdfH,
-                                opacity: ann.opacity,
-                            });
-                        }
-                    }
-                } else {
-                    // ---- NO ANNOTATIONS: copy page as-is ----
-                    const [copiedPage] = await outDoc.copyPages(srcDoc, [i]);
-                    outDoc.addPage(copiedPage);
-                }
-            }
-
-            // Preserve metadata
-            outDoc.setTitle(srcDoc.getTitle() ?? '');
-            outDoc.setAuthor(srcDoc.getAuthor() ?? '');
-            outDoc.setSubject(srcDoc.getSubject() ?? '');
-
-            const bytes = await outDoc.save();
-            const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
-            downloadBlob(blob, file.name.replace('.pdf', '_edited.pdf'));
-
-            pdfjsDoc.destroy();
+            const result = await mupdf.save();
+            const safeBytes = new Uint8Array(result.buffer);
+            const blob = new Blob([safeBytes], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
+            downloadBlob(blob, sanitized);
+            setToastInfo({ filename: sanitized, blobUrl });
+            setHasChanges(false);
         } catch (err) {
             console.error('Failed to save:', err);
-            alert('Failed to save edited PDF.');
+            alert('Failed to save annotated PDF.');
         } finally {
             setIsProcessing(false);
         }
-    };
+    }, [mupdf, sanitized, file, currentPage, pageAnnotations]);
 
-    const currentPageAnnotations = annotations.filter(a => a.pageIndex === currentPage);
-    const selected = selectedId ? annotations.find(a => a.id === selectedId) : null;
+    const handleCloseToast = useCallback(() => {
+        if (toastInfo?.blobUrl) URL.revokeObjectURL(toastInfo.blobUrl);
+        setToastInfo(null);
+    }, [toastInfo]);
 
-    /* ---- No file loaded ---- */
-    if (!file) {
-        return (
-            <div className="min-h-screen bg-[#09090B] text-zinc-100">
-                <div className="border-b border-zinc-800 bg-[#09090B]">
-                    <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
-                        <a href="/pdf" className="text-sm text-zinc-400 hover:text-white">PDF Tools</a>
-                        <ChevronRight className="w-4 h-4 text-zinc-600" />
-                        <span className="text-sm text-zinc-100 font-medium">PDF Editor</span>
-                    </div>
-                </div>
-                <div className="max-w-3xl mx-auto px-6 py-16">
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold mb-3">PDF Editor</h1>
-                        <p className="text-zinc-400">Add text, images, and redact content — all in one place.</p>
-                    </div>
-                    {isLoading ? (
-                        <FileProcessingOverlay message="Loading your PDF…" />
-                    ) : (
-                        <Dropzone
-                            onFilesAdded={handleFileAdded}
-                            acceptedTypes={['application/pdf']}
-                            maxFiles={1}
-                        />
-                    )}
-                </div>
-            </div>
-        );
-    }
+    /* ---- Cursor ---- */
+    const cursorClass = useMemo(() => {
+        if (activeTool === 'select') {
+            if (dragMode?.startsWith('resize') || hoverCursor === 'resize') return 'cursor-nwse-resize';
+            if (dragMode === 'move' || hoverCursor === 'move') return 'cursor-move';
+            return 'cursor-default';
+        }
+        switch (activeTool) {
+            case 'freetext': return 'cursor-text';
+            case 'freehand': return 'cursor-crosshair';
+            case 'eraser': return 'cursor-pointer';
+            case 'image-stamp': case 'stamp': case 'sticky-note': return 'cursor-copy';
+            default: return 'cursor-crosshair';
+        }
+    }, [activeTool, dragMode, hoverCursor]);
 
-    /* ---- Editor UI ---- */
+    /* ---- Annotation → AppliedChange mapping ---- */
+    const annotationChanges = useMemo<AppliedChange[]>(() => {
+        const typeCounts: Record<string, number> = {};
+        return pageAnnotations.map((annot, idx) => {
+            typeCounts[annot.type] = (typeCounts[annot.type] || 0) + 1;
+            const label = `${annot.type} ${typeCounts[annot.type]}`;
+            const r = Math.round((annot.color?.[0] ?? 0) * 255);
+            const g = Math.round((annot.color?.[1] ?? 0) * 255);
+            const b = Math.round((annot.color?.[2] ?? 0) * 255);
+            const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+            return {
+                id: `annot-${idx}`,
+                description: label,
+                color: hex,
+                isSelected: selectedAnnotIndex === idx,
+                onClick: () => setSelectedAnnotIndex(prev => prev === idx ? null : idx),
+                onUndo: () => deleteAnnotationAndRefresh(idx),
+            };
+        });
+    }, [pageAnnotations, selectedAnnotIndex, deleteAnnotationAndRefresh]);
+
+    const handleResetAnnotations = useCallback(async () => {
+        for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+            await mupdf.deleteAnnotation(currentPage, i);
+        }
+        setHasChanges(true);
+        setSelectedAnnotIndex(null);
+        await refreshCurrentPage();
+    }, [pageAnnotations, mupdf, currentPage, refreshCurrentPage]);
+
+    /* ---- Render ---- */
     return (
-        <div className="min-h-screen bg-[#09090B] text-zinc-100 flex flex-col">
-            {/* Top bar */}
-            <div className="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur-sm sticky top-0 z-40">
-                <div className="max-w-[1600px] mx-auto px-4 py-2 flex items-center justify-between gap-4">
-                    {/* Left: file info */}
+        <div className="fixed inset-0 flex flex-col bg-[#09090B] text-zinc-100 overflow-hidden">
+
+            {/* ── Top Bar ── */}
+            <header className="h-[52px] border-b border-zinc-800 bg-[#141415] shrink-0 flex items-center justify-between px-4 z-40">
+                {/* Left: branding + file info */}
+                <div className="flex items-center gap-5 min-w-0">
+                    <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity shrink-0">
+                        <div className="w-8 h-8 bg-[#3A76F0] rounded-lg flex items-center justify-center shadow-sm">
+                            <Logo className="w-5 h-5 text-white" />
+                        </div>
+                        <span className="font-semibold text-zinc-100 text-[15px] tracking-tight">Modufile</span>
+                    </Link>
+
+                    <div className="h-6 w-px bg-zinc-800 shrink-0" />
+
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 bg-red-500/10 rounded flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
                             <FileText className="w-4 h-4 text-red-500" />
                         </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-medium text-zinc-200 truncate">{file.name}</p>
-                            <p className="text-xs text-zinc-500">{formatFileSize(file.size)} • {file.pageCount} pages</p>
-                        </div>
-                        <button onClick={removeFile} className="p-1 hover:bg-zinc-800 rounded transition-colors flex-shrink-0">
-                            <X className="w-4 h-4 text-zinc-500" />
-                        </button>
-                    </div>
-
-                    {/* Center: tools */}
-                    <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1">
-                        {TOOL_ITEMS.map(({ tool, icon: Icon, label, shortcut }) => (
-                            <button
-                                key={tool}
-                                onClick={() => setActiveTool(tool)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTool === tool
-                                    ? 'bg-[#3A76F0] text-white shadow-lg shadow-[#3A76F0]/20'
-                                    : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-                                    }`}
-                                title={`${label} (${shortcut})`}
-                            >
-                                <Icon className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">{label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Right: actions */}
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1">
-                            <button
-                                onClick={undo}
-                                disabled={historyIndex <= 0}
-                                className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
-                                title="Undo (Ctrl+Z)"
-                            >
-                                <Undo2 className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={redo}
-                                disabled={historyIndex >= history.length - 1}
-                                className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
-                                title="Redo (Ctrl+Y)"
-                            >
-                                <Redo2 className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1">
-                            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))} className="p-1.5 rounded text-zinc-400 hover:text-white transition-colors">
-                                <ZoomOut className="w-4 h-4" />
-                            </button>
-                            <span className="text-xs text-zinc-500 w-10 text-center">{Math.round(zoom * 100 / 1.5 * 100)}%</span>
-                            <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} className="p-1.5 rounded text-zinc-400 hover:text-white transition-colors">
-                                <ZoomIn className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={handleSave}
-                            disabled={isProcessing || annotations.length === 0}
-                            className="flex items-center gap-2 px-4 py-2 bg-[#3A76F0] hover:bg-[#2563EB] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            Save
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex flex-1 overflow-hidden">
-                {/* Properties panel (left sidebar) */}
-                <AnimatePresence>
-                    <motion.div
-                        className="w-72 border-r border-zinc-800 bg-zinc-900/50 overflow-y-auto flex-shrink-0"
-                        initial={{ x: -280 }}
-                        animate={{ x: 0 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <div className="p-4 space-y-5">
-                            {/* Tool-specific settings */}
-                            {activeTool === 'text' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">Text Settings</h3>
-
-                                    <div>
-                                        <label className="text-xs text-zinc-500 mb-1 block">Font</label>
-                                        <select
-                                            className="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                            value={textFont}
-                                            onChange={(e) => {
-                                                setTextFont(e.target.value);
-                                                if (selected?.type === 'text') updateAnnotation(selected.id, { fontName: e.target.value });
-                                            }}
-                                        >
-                                            {FONT_OPTIONS.map(f => (
-                                                <option key={f.value} value={f.value}>{f.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <div className="flex justify-between mb-1">
-                                            <label className="text-xs text-zinc-500">Size</label>
-                                            <span className="text-xs text-[#3A76F0]">{textFontSize}pt</span>
-                                        </div>
-                                        <input
-                                            type="range" min="8" max="72" value={textFontSize}
-                                            onChange={(e) => {
-                                                const val = Number(e.target.value);
-                                                setTextFontSize(val);
-                                                if (selected?.type === 'text') updateAnnotation(selected.id, { fontSize: val });
-                                            }}
-                                            className="w-full accent-[#3A76F0]"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="text-xs text-zinc-500 mb-1 block">Color</label>
-                                        <div className="flex gap-1.5 flex-wrap">
-                                            {['#000000', '#FFFFFF', '#FF0000', '#0000FF', '#008000', '#FF6600'].map(c => (
-                                                <button
-                                                    key={c}
-                                                    onClick={() => {
-                                                        setTextColor(c);
-                                                        if (selected?.type === 'text') updateAnnotation(selected.id, { color: c });
-                                                    }}
-                                                    className={`w-6 h-6 rounded border-2 transition-all ${textColor === c ? 'border-[#3A76F0] scale-110' : 'border-zinc-600'}`}
-                                                    style={{ backgroundColor: c }}
-                                                />
-                                            ))}
-                                            <input
-                                                type="color" value={textColor}
-                                                onChange={(e) => {
-                                                    setTextColor(e.target.value);
-                                                    if (selected?.type === 'text') updateAnnotation(selected.id, { color: e.target.value });
-                                                }}
-                                                className="w-6 h-6 rounded border-2 border-zinc-600 cursor-pointer"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <p className="text-xs text-zinc-600">Click on the page to place text</p>
+                        {file ? (
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="min-w-0">
+                                    <p className="text-[13px] text-zinc-200 font-medium leading-tight truncate max-w-[160px] xl:max-w-[260px]">{file.name}</p>
+                                    <p className="text-[11px] text-zinc-500 leading-tight">{formatFileSize(file.size)} · {file.pageCount}p</p>
                                 </div>
-                            )}
-
-                            {activeTool === 'image' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">Image Settings</h3>
-                                    <button
-                                        onClick={() => imageInputRef.current?.click()}
-                                        className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Upload className="w-3.5 h-3.5" />
-                                        Upload Image
-                                    </button>
-                                    <input
-                                        ref={imageInputRef}
-                                        type="file"
-                                        accept="image/png,image/jpeg"
-                                        className="hidden"
-                                        onChange={handleImageUpload}
-                                    />
-                                    <p className="text-xs text-zinc-600">Or click on the page after selecting the Image tool</p>
-                                </div>
-                            )}
-
-                            {activeTool === 'redact' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">Redact Settings</h3>
-                                    <div>
-                                        <label className="text-xs text-zinc-500 mb-1 block">Color</label>
-                                        <div className="flex gap-1.5">
-                                            {['#000000', '#FFFFFF', '#FF0000', '#808080'].map(c => (
-                                                <button
-                                                    key={c}
-                                                    onClick={() => setRedactColor(c)}
-                                                    className={`w-7 h-7 rounded border-2 transition-all ${redactColor === c ? 'border-[#3A76F0] scale-110' : 'border-zinc-600'}`}
-                                                    style={{ backgroundColor: c }}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-zinc-600">Click and drag on the page to redact an area</p>
-                                </div>
-                            )}
-
-                            {activeTool === 'select' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">Selection</h3>
-                                    <p className="text-xs text-zinc-600">Click to select an annotation, drag to move.</p>
-                                    <p className="text-xs text-zinc-600">Press <kbd className="px-1 py-0.5 bg-zinc-800 rounded text-zinc-400">Delete</kbd> to remove selected.</p>
-                                </div>
-                            )}
-
-                            {/* Selected annotation properties */}
-                            {selected && (
-                                <div className="pt-4 border-t border-zinc-800 space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="text-xs text-[#3A76F0] uppercase font-semibold tracking-wider">Selected</h3>
-                                        <button
-                                            onClick={() => removeAnnotation(selected.id)}
-                                            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                                        >
-                                            <Trash2 className="w-3 h-3" /> Delete
-                                        </button>
-                                    </div>
-
-                                    {selected.type === 'text' && (
-                                        <textarea
-                                            value={(selected as TextAnnotation).text}
-                                            onChange={(e) => updateAnnotation(selected.id, { text: e.target.value })}
-                                            className="w-full px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-100 focus:outline-none focus:border-[#3A76F0] resize-none"
-                                            rows={3}
-                                        />
-                                    )}
-
-                                    {selected.type === 'image' && (
-                                        <div className="space-y-2">
-                                            <img src={(selected as ImageAnnotation).previewUrl} alt="" className="w-full h-16 object-cover rounded border border-zinc-700" />
-                                            <div>
-                                                <div className="flex justify-between mb-1">
-                                                    <label className="text-xs text-zinc-500">Size</label>
-                                                    <span className="text-xs text-zinc-400">{Math.round((selected as ImageAnnotation).width)}px</span>
-                                                </div>
-                                                <input
-                                                    type="range" min="20" max="800"
-                                                    value={(selected as ImageAnnotation).width}
-                                                    onChange={(e) => {
-                                                        const imgAnn = selected as ImageAnnotation;
-                                                        const newW = Number(e.target.value);
-                                                        const ratio = imgAnn.naturalHeight / imgAnn.naturalWidth;
-                                                        updateAnnotation(selected.id, { width: newW, height: newW * ratio });
-                                                    }}
-                                                    className="w-full accent-[#3A76F0]"
-                                                />
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between mb-1">
-                                                    <label className="text-xs text-zinc-500">Opacity</label>
-                                                    <span className="text-xs text-zinc-400">{Math.round((selected as ImageAnnotation).opacity * 100)}%</span>
-                                                </div>
-                                                <input
-                                                    type="range" min="10" max="100"
-                                                    value={(selected as ImageAnnotation).opacity * 100}
-                                                    onChange={(e) => updateAnnotation(selected.id, { opacity: Number(e.target.value) / 100 })}
-                                                    className="w-full accent-[#3A76F0]"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Annotation list */}
-                            {annotations.length > 0 && (
-                                <div className="pt-4 border-t border-zinc-800 space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="text-xs text-zinc-500 uppercase font-semibold tracking-wider">
-                                            Layers ({annotations.length})
-                                        </h3>
-                                        <button
-                                            onClick={() => {
-                                                annotations.forEach(a => { if (a.type === 'image') URL.revokeObjectURL((a as ImageAnnotation).previewUrl); });
-                                                setAnnotations([]);
-                                                pushHistory([]);
-                                                setSelectedId(null);
-                                            }}
-                                            className="text-xs text-red-400 hover:text-red-300"
-                                        >
-                                            Clear All
-                                        </button>
-                                    </div>
-                                    <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                                        {annotations.map((a) => (
-                                            <button
-                                                key={a.id}
-                                                onClick={() => { setSelectedId(a.id); setCurrentPage(a.pageIndex); }}
-                                                className={`w-full flex items-center gap-2 text-xs p-1.5 rounded transition-colors ${selectedId === a.id
-                                                    ? 'bg-[#3A76F0]/20 text-[#3A76F0]'
-                                                    : 'text-zinc-400 hover:bg-zinc-800'
-                                                    }`}
-                                            >
-                                                {a.type === 'text' && <Type className="w-3 h-3" />}
-                                                {a.type === 'image' && <ImagePlus className="w-3 h-3" />}
-                                                {a.type === 'redact' && <Square className="w-3 h-3" />}
-                                                <span className="truncate">
-                                                    P{a.pageIndex + 1}: {
-                                                        a.type === 'text' ? (a as TextAnnotation).text :
-                                                            a.type === 'image' ? 'Image' : 'Redaction'
-                                                    }
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                </AnimatePresence>
-
-                {/* Canvas area */}
-                <div className="flex-1 overflow-auto bg-zinc-950 flex flex-col items-center py-6 px-4">
-                    {/* Page navigation */}
-                    <div className="flex items-center gap-4 mb-4">
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                            disabled={currentPage === 0}
-                            className="p-1.5 rounded hover:bg-zinc-800 transition-colors disabled:opacity-30"
-                        >
-                            <ChevronLeft className="w-5 h-5 text-zinc-400" />
-                        </button>
-                        <span className="text-sm text-zinc-400">
-                            Page {currentPage + 1} of {file.pageCount}
-                        </span>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(file.pageCount - 1, p + 1))}
-                            disabled={currentPage === file.pageCount - 1}
-                            className="p-1.5 rounded hover:bg-zinc-800 transition-colors disabled:opacity-30"
-                        >
-                            <ChevronRight className="w-5 h-5 text-zinc-400" />
-                        </button>
-                    </div>
-
-                    {/* Canvas container */}
-                    <div className="relative inline-block shadow-2xl rounded-sm">
-                        <canvas ref={canvasRef} className={`block transition-opacity duration-300 ${pageRendered ? 'opacity-100' : 'opacity-0'}`} />
-                        <div
-                            ref={overlayRef}
-                            className={`absolute inset-0 ${activeTool === 'redact' ? 'cursor-crosshair' :
-                                activeTool === 'text' ? 'cursor-text' :
-                                    activeTool === 'image' ? 'cursor-copy' :
-                                        'cursor-default'
-                                }`}
-                            onClick={handleCanvasClick}
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                            onMouseLeave={handleMouseUp}
-                        >
-                            {/* Render annotations */}
-                            {currentPageAnnotations.map(a => {
-                                if (a.type === 'text') {
-                                    const ta = a as TextAnnotation;
-                                    return (
-                                        <div
-                                            key={a.id}
-                                            className={`absolute select-none px-0.5 rounded ${selectedId === a.id ? 'ring-2 ring-[#3A76F0] bg-[#3A76F0]/10' : 'hover:ring-1 hover:ring-zinc-400'
-                                                }`}
-                                            style={{
-                                                left: ta.x,
-                                                top: ta.y - ta.fontSize,
-                                                fontSize: `${ta.fontSize}px`,
-                                                color: ta.color,
-                                                fontFamily: ta.fontName.includes('Courier') ? 'monospace' :
-                                                    ta.fontName.includes('Times') ? 'serif' : 'sans-serif',
-                                                fontWeight: ta.fontName.includes('Bold') ? 'bold' : 'normal',
-                                                whiteSpace: 'pre',
-                                                cursor: activeTool === 'select' ? 'move' : 'default',
-                                            }}
-                                            onMouseDown={(e) => handleAnnotationMouseDown(e, a.id)}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedId(a.id); }}
-                                            onDoubleClick={(e) => {
-                                                e.stopPropagation();
-                                                const newText = prompt('Edit text:', ta.text);
-                                                if (newText !== null) {
-                                                    updateAnnotation(a.id, { text: newText });
-                                                    pushHistory(annotations.map(ann => ann.id === a.id ? { ...ann, text: newText } as Annotation : ann));
-                                                }
-                                            }}
-                                        >
-                                            {ta.text}
-                                        </div>
-                                    );
-                                }
-
-                                if (a.type === 'image') {
-                                    const ia = a as ImageAnnotation;
-                                    return (
-                                        <img
-                                            key={a.id}
-                                            src={ia.previewUrl}
-                                            alt="overlay"
-                                            className={`absolute select-none ${selectedId === a.id ? 'ring-2 ring-[#3A76F0]' : 'hover:ring-1 hover:ring-zinc-400'
-                                                }`}
-                                            style={{
-                                                left: ia.x,
-                                                top: ia.y,
-                                                width: ia.width,
-                                                height: ia.height,
-                                                opacity: ia.opacity,
-                                                cursor: activeTool === 'select' ? 'move' : 'default',
-                                            }}
-                                            onMouseDown={(e) => handleAnnotationMouseDown(e, a.id)}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedId(a.id); }}
-                                            draggable={false}
-                                        />
-                                    );
-                                }
-
-                                if (a.type === 'redact') {
-                                    const ra = a as RedactAnnotation;
-                                    return (
-                                        <div
-                                            key={a.id}
-                                            className={`absolute ${selectedId === a.id ? 'ring-2 ring-[#3A76F0]' : ''
-                                                }`}
-                                            style={{
-                                                left: ra.x,
-                                                top: ra.y,
-                                                width: ra.width,
-                                                height: ra.height,
-                                                backgroundColor: ra.color,
-                                                opacity: 0.85,
-                                                cursor: activeTool === 'select' ? 'move' : 'default',
-                                            }}
-                                            onMouseDown={(e) => handleAnnotationMouseDown(e, a.id)}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedId(a.id); }}
-                                        />
-                                    );
-                                }
-
-                                return null;
-                            })}
-
-                            {/* Currently drawing redact rect */}
-                            {isDrawing && drawStart && currentDraw && (
-                                <div
-                                    className="absolute border-2 border-dashed border-red-500"
-                                    style={{
-                                        left: Math.min(drawStart.x, currentDraw.x),
-                                        top: Math.min(drawStart.y, currentDraw.y),
-                                        width: Math.abs(currentDraw.x - drawStart.x),
-                                        height: Math.abs(currentDraw.y - drawStart.y),
-                                        backgroundColor: redactColor,
-                                        opacity: 0.4,
-                                    }}
-                                />
-                            )}
-                        </div>
-
-                        {!pageRendered && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center min-h-[300px] bg-zinc-900/80 rounded-sm">
-                                <Logo isProcessing className="w-12 h-12 text-[#3A76F0] mb-3" />
-                                <p className="text-xs text-zinc-500">Rendering page…</p>
+                                <button onClick={removeFile} className="p-1 hover:bg-zinc-800 rounded transition-colors shrink-0">
+                                    <X className="w-3.5 h-3.5 text-zinc-500" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div>
+                                <p className="text-[13px] text-zinc-200 font-medium leading-tight">PDF Editor</p>
+                                <p className="text-[11px] text-zinc-500 leading-tight">Annotate, draw, stamp PDFs in-browser</p>
                             </div>
                         )}
                     </div>
                 </div>
+
+                {/* Center: zoom (desktop only) */}
+                <div className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+                    <div className="flex items-center gap-1 bg-[#1F1F22] rounded border border-zinc-800/60 p-0.5 h-8">
+                        <button
+                            onClick={() => setZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                            className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
+                        >
+                            <ZoomOut className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-[11px] text-zinc-400 font-medium w-10 text-center">{Math.round(zoom * 100)}%</span>
+                        <button
+                            onClick={() => setZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))}
+                            className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
+                        >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Right: nav links + save */}
+                <div className="flex items-center gap-4 shrink-0">
+                    <nav className="hidden lg:flex items-center gap-5">
+                        <Link prefetch={false} href="/pdf" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">PDF Tools</Link>
+                        <Link prefetch={false} href="/image" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">Image Tools</Link>
+                        <Link prefetch={false} href="/ocr" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">OCR</Link>
+                    </nav>
+
+                    <button
+                        onClick={handleSave}
+                        disabled={isProcessing || !file}
+                        className="h-8 px-4 inline-flex items-center justify-center gap-2 rounded-md bg-[#3A76F0] hover:bg-[#2563EB] text-white transition-colors text-[13px] font-medium disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                        {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        <span>Save</span>
+                    </button>
+                </div>
+            </header>
+
+            {/* ── Mobile: horizontal toolbar ── */}
+            <div className="md:hidden shrink-0">
+                <AnnotationToolbar
+                    activeTool={activeTool}
+                    direction="horizontal"
+                    onToolChange={(tool) => {
+                        setActiveTool(tool);
+                        if (tool === 'stamp') setShowStampPicker(true);
+                        else setShowStampPicker(false);
+                    }}
+                />
             </div>
+
+            {/* ── Main workspace ── */}
+            <div className="flex flex-1 overflow-hidden">
+
+                {/* Left: vertical toolbar (desktop only) */}
+                <div className="hidden md:flex shrink-0 p-2 relative flex-col">
+                    <AnnotationToolbar
+                        activeTool={activeTool}
+                        direction="vertical"
+                        onToolChange={(tool) => {
+                            setActiveTool(tool);
+                            if (tool === 'stamp') setShowStampPicker(true);
+                            else setShowStampPicker(false);
+                        }}
+                    />
+                    <AnimatePresence>
+                        {showStampPicker && (
+                            <StampPicker
+                                onSelect={(stamp) => {
+                                    setSelectedStamp(stamp);
+                                    setActiveTool('stamp');
+                                    setShowStampPicker(false);
+                                }}
+                                onClose={() => setShowStampPicker(false)}
+                            />
+                        )}
+                    </AnimatePresence>
+                </div>
+
+                {/* Canvas area — vertically scrollable, all pages stacked */}
+                <div
+                    ref={canvasContainerRef}
+                    className="flex-1 overflow-auto bg-zinc-950 flex flex-col items-center py-6 px-4"
+                >
+                    {isLoading ? (
+                        <div className="flex flex-col items-center gap-4">
+                            <Logo isProcessing className="w-16 h-16 text-[#3A76F0]" />
+                            <div className="text-center">
+                                <p className="text-sm font-medium text-zinc-200 mb-1">Importing PDF...</p>
+                                <p className="text-xs text-zinc-500">Preparing editor</p>
+                            </div>
+                        </div>
+                    ) : !file ? (
+                        <div className="w-full max-w-lg">
+                            <Dropzone
+                                onFilesAdded={handleFileAdded}
+                                acceptedTypes={['application/pdf']}
+                                maxFiles={1}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-6 w-full">
+                            {Array.from({ length: file.pageCount }, (_, idx) => {
+                                const rendered = renderedPages.get(idx);
+                                const isRendering = renderingPages.has(idx);
+                                const isActive = currentPage === idx;
+                                const pageInfo = file.pages[idx];
+                                const w = rendered?.w ?? Math.round((pageInfo?.width ?? 612) * scale);
+                                const h = rendered?.h ?? Math.round((pageInfo?.height ?? 792) * scale);
+                                const dispW = Math.round(w / dpr);
+                                const dispH = Math.round(h / dpr);
+
+                                return (
+                                    <div key={idx} className="flex flex-col items-center">
+                                        <span className="text-[10px] text-zinc-600 mb-1 tracking-wide">
+                                            Page {idx + 1}
+                                        </span>
+                                        <div
+                                            ref={isActive ? activePageDivRef : undefined}
+                                            className={`relative inline-block shadow-2xl rounded-sm transition-all duration-150 ${
+                                                isActive ? 'ring-2 ring-[#3A76F0]/60 ring-offset-2 ring-offset-zinc-950' : ''
+                                            }`}
+                                            onClick={() => {
+                                                if (!isActive) setCurrentPage(idx);
+                                            }}
+                                        >
+                                            {rendered ? (
+                                                <img
+                                                    src={rendered.url}
+                                                    alt={`Page ${idx + 1}`}
+                                                    style={{ width: dispW, height: dispH }}
+                                                    className="block select-none"
+                                                    draggable={false}
+                                                />
+                                            ) : (
+                                                <div
+                                                    style={{ width: dispW, height: dispH }}
+                                                    className="bg-white flex items-center justify-center"
+                                                >
+                                                    <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
+                                                </div>
+                                            )}
+
+                                            {/* Interactive canvas — only on active page */}
+                                            {isActive && (
+                                                <canvas
+                                                    ref={overlayCanvasRef}
+                                                    width={renderWidth}
+                                                    height={renderHeight}
+                                                    className={`absolute inset-0 ${textEditState ? 'pointer-events-none' : cursorClass}`}
+                                                    style={{ width: displayWidth, height: displayHeight }}
+                                                    onMouseDown={handleMouseDown}
+                                                    onMouseMove={handleMouseMove}
+                                                    onMouseUp={handleMouseUp}
+                                                    onDoubleClick={handleDoubleClick}
+                                                    onMouseLeave={() => {
+                                                        setHoverCursor(null);
+                                                        if (isDrawing && activeTool !== 'freehand') handleMouseUp();
+                                                    }}
+                                                />
+                                            )}
+
+                                            {/* Rich text overlay — shown when freetext tool is active */}
+                                            {isActive && textEditState && textEditState.pageIdx === idx && (
+                                                <TextEditOverlay
+                                                    x={textEditState.cssX}
+                                                    y={textEditState.cssY}
+                                                    boxWidth={textEditState.boxWidth}
+                                                    initialText={textEditState.initialText}
+                                                    initialFontSize={properties.fontSize}
+                                                    initialColor={`#${[properties.textR, properties.textG, properties.textB].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`}
+                                                    onCommit={handleTextEditCommit}
+                                                    onCancel={handleTextEditCancel}
+                                                />
+                                            )}
+
+                                            {isRendering && (
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/80 rounded-sm">
+                                                    <Logo isProcessing className="w-10 h-10 text-[#3A76F0] mb-2" />
+                                                    <p className="text-xs text-zinc-500">Rendering...</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: Properties panel */}
+                <PropertyPanel
+                    activeTool={activeTool}
+                    properties={properties}
+                    onPropertiesChange={(updates) => setProperties(prev => ({ ...prev, ...updates }))}
+                    onImageUpload={() => imageInputRef.current?.click()}
+                    pendingImageName={pendingImage?.name}
+                    onClearImage={() => setPendingImage(null)}
+                    annotations={pageAnnotations}
+                    selectedAnnotationIndex={selectedAnnotIndex}
+                    onSelectAnnotation={setSelectedAnnotIndex}
+                    onDeleteAnnotation={deleteAnnotationAndRefresh}
+                    onUpdateAnnotation={updateAnnotationAndRefresh}
+                    appliedChanges={annotationChanges}
+                    onResetChanges={pageAnnotations.length > 0 ? handleResetAnnotations : undefined}
+                    outputFilename={outputFilename}
+                    onFilenameChange={setOutputFilename}
+                    collapsed={mobilePanelCollapsed}
+                    onToggleCollapse={() => setMobilePanelCollapsed(p => !p)}
+                />
+            </div>
+
+            {/* Hidden image input */}
+            <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={handleImageUpload}
+            />
+
+            {/* Download toast */}
+            <AnimatePresence>
+                {toastInfo && (
+                    <DownloadToast
+                        filename={toastInfo.filename}
+                        blobUrl={toastInfo.blobUrl}
+                        onClose={handleCloseToast}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }

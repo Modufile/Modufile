@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Dropzone } from '@/components/ui';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, FileOutput, AlertTriangle } from 'lucide-react';
@@ -37,6 +38,15 @@ export default function OfficeToPdfPage() {
             description="Convert Word, Excel, and PowerPoint files to PDF"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['office-to-pdf'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['office-to-pdf'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="space-y-6">
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">

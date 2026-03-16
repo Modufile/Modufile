@@ -12,6 +12,10 @@ export interface ToolContent {
     about: string;
     techSetup: TechSetup[];
     faqs: FAQ[];
+    acceptsMultipleFiles?: boolean;
+    acceptedFileTypes?: string[];
+    /** Importance level. 1 = highest priority (flagship tools). Higher numbers = lower priority. Undefined = unranked. */
+    importance?: number;
 }
 
 export const toolContent: Record<string, ToolContent> = {
@@ -20,6 +24,9 @@ export const toolContent: Record<string, ToolContent> = {
     /* ------------------------------------------------------------------ */
 
     'pdf-merge': {
+        importance: 1,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Merge PDF tool lets you combine PDF files into a single document directly in your browser. It uses the pdf-lib library running entirely on the client side, so your files are never uploaded to any server. You can merge multiple PDFs, reorder them with drag and drop, and download the result instantly — with no file size limits, no account required, and no watermarks on the output. This makes it a privacy-first alternative to tools like iLovePDF or Smallpdf, which process files on their servers. Whether you need to combine contracts, join scanned pages, or merge PDF documents for a report, Modufile handles it without compromising quality or privacy.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Copies and combines pages from multiple PDF documents into a single output file' },
@@ -69,6 +76,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-split': {
+        importance: 1,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Split PDF tool lets you divide a PDF document into multiple files directly in your browser. It offers three split modes: Merge Selected (combine chosen pages into one file), Separate Clusters (split consecutive page ranges into individual files), and Burst (create one PDF per selected page). Everything runs locally with no file uploads, making it a secure alternative to server-based PDF splitters. Whether you need to extract specific pages, separate PDF pages into individual files, or split a PDF into multiple documents, the tool handles it while preserving full document quality.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Extracts and copies selected pages into new PDF documents' },
@@ -114,6 +124,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-rotate': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Rotate PDF tool lets you change the orientation of pages in a PDF document directly in your browser. You can rotate all pages by 90\u00B0, 180\u00B0, or 270\u00B0 with a single click. The tool modifies only the page rotation metadata — no content is altered or re-rendered — so the operation is lossless and instant. It runs entirely client-side, which means your PDF is never uploaded to a server. This is ideal for fixing scanned documents that came in sideways, correcting page orientation before printing, or rotating a PDF from landscape to portrait.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Modifies page rotation metadata in the PDF document' },
@@ -155,6 +168,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-redact': {
+        importance: 1,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Redact PDF tool performs true, permanent redaction — it physically removes the underlying text and image data from the PDF content stream using the MuPDF engine compiled to WebAssembly. Unlike simple black-box overlays that can be removed, Modufile\'s redaction makes the content unrecoverable by any tool. You can draw redaction boxes manually on any page or use the Find & Redact feature to search for specific text and redact all occurrences at once. The entire process runs locally in your browser, so sensitive documents are never uploaded to a server. This makes it a strong alternative to paid tools like Adobe Acrobat\'s redaction tool, offering a free, privacy-focused PDF redaction tool for anyone who needs to black out text, remove personal information, or permanently redact sensitive data in a PDF.',
         techSetup: [
             { library: 'mupdf (WASM)', purpose: 'Performs true content-stream redaction, permanently removing text and image data from the PDF' },
@@ -206,6 +222,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-watermark': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Watermark PDF tool lets you add customizable text watermarks to every page of a PDF document. You can configure the watermark text, font size, color, opacity, and rotation angle — placing it diagonally, horizontally, or at any custom angle. The watermark is drawn as a native vector text overlay using pdf-lib, so the original PDF quality and searchability are fully preserved. Everything runs in your browser with no file uploads. This tool is commonly used to mark documents as "Draft," "Confidential," or "Sample," or to add branding to shared files.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Draws text watermarks onto each page with customizable font, color, opacity, and rotation' },
@@ -247,6 +266,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-flatten': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Flatten PDF tool converts interactive form fields in a PDF — such as text boxes, checkboxes, dropdowns, and radio buttons — into static page content. After flattening, the filled-in values become permanent, non-editable text embedded in the page. This is useful when you need to share a completed form and prevent further changes, fix display issues in certain viewers, or prepare forms for archival. The tool uses pdf-lib to merge AcroForm fields into the page content, and the entire process runs locally in your browser.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Merges interactive form fields (AcroForm) into static page content' },
@@ -288,6 +310,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-metadata': {
+        importance: 1,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s PDF Metadata Editor lets you view and modify the metadata fields stored in a PDF\'s Info dictionary — including Title, Author, Subject, Keywords, Creator, and Producer. This is useful for removing personal information before sharing a document, adding a descriptive title for accessibility compliance, or updating keywords for document management systems. The tool uses pdf-lib to read and write metadata without touching page content, and runs entirely in your browser with no uploads.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Reads and writes the PDF Info dictionary fields (Title, Author, Subject, Keywords, etc.)' },
@@ -328,48 +353,10 @@ export const toolContent: Record<string, ToolContent> = {
         ],
     },
 
-    'pdf-extract': {
-        about: 'Modufile\'s Extract Pages tool lets you select specific pages from a PDF and save them as a new document. Unlike the Split tool, which offers multiple split modes, the Extract tool always outputs selected pages as a single merged PDF. You can click on page thumbnails to pick any combination of pages — including non-consecutive ones — and they will be compiled in order into a new file. The tool uses pdf-lib for lossless page copying and runs entirely in your browser, making it safe to extract pages from PDFs containing sensitive content.',
-        techSetup: [
-            { library: 'pdf-lib', purpose: 'Copies selected pages into a new PDF document' },
-        ],
-        faqs: [
-            {
-                question: 'What is the difference between Extract and Split?',
-                answer: 'Extract always outputs selected pages as a single merged PDF. Split offers additional modes like Burst (one PDF per page) and Separate Clusters (one PDF per consecutive group). Use Extract when you just need specific pages in one file.',
-            },
-            {
-                question: 'Can I extract non-consecutive pages?',
-                answer: 'Yes. Click on individual page thumbnails to select any combination of pages, even non-consecutive ones. They will be merged into a single output file in the order they appear in the original document.',
-            },
-            {
-                question: 'Does extracting pages reduce quality?',
-                answer: 'No. Pages are copied at the PDF structure level using pdf-lib. All fonts, images, and vector graphics are preserved at full quality with no re-encoding.',
-            },
-            {
-                question: 'Can I extract pages from a PDF online for free?',
-                answer: 'Yes. Modufile\'s extract tool is completely free with no daily limits or account required. Your files are processed locally in your browser — nothing is uploaded to a server.',
-            },
-            {
-                question: 'Can I extract a single page from a large PDF?',
-                answer: 'Yes. Simply select the one page you need and download it as a new single-page PDF. This is the quickest way to extract one page from a PDF without installing any software.',
-            },
-            {
-                question: 'Can I reorder the extracted pages?',
-                answer: 'The extracted pages maintain their original order from the source document. If you need to reorder them, use the PDF Organize tool after extracting.',
-            },
-            {
-                question: 'Is there a page count limit?',
-                answer: 'No. You can extract pages from PDFs of any length. The only constraint is your device\'s available memory since processing runs locally.',
-            },
-            {
-                question: 'Does extracting modify the original PDF?',
-                answer: 'No. The original file is never changed. A new PDF is created containing only the selected pages.',
-            },
-        ],
-    },
-
     'pdf-remove-pages': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Remove Pages tool lets you delete specific pages from a PDF document. Select the pages you want to remove by clicking their thumbnails, and the tool creates a new PDF containing only the remaining pages. Your original file is never modified. The tool uses pdf-lib for lossless page copying and runs entirely in your browser, so your documents stay private. This is useful for removing blank pages, cover sheets, appendices, or any unwanted content from a PDF.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Creates a new PDF with all pages except the ones selected for removal' },
@@ -407,6 +394,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-organize': {
+        importance: 1,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s PDF Organize tool provides a visual drag-and-drop interface for rearranging, rotating, and deleting pages within a PDF document. Page thumbnails are rendered using pdfjs-dist, and you can drag them to reorder, select pages to delete, or rotate individual pages. The final document is assembled by pdf-lib, preserving full quality. This tool is ideal for reordering pages before printing, cleaning up scanned documents, or organizing combined PDFs. All processing runs locally in your browser.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Reorders, rotates, and removes pages based on user-arranged thumbnails' },
@@ -449,6 +439,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-page-numbers': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Page Numbers tool adds page number text to every page of a PDF document. You can customize the position, font size, and starting number. The numbers are stamped using embedded standard fonts via pdf-lib, ensuring compatibility across all PDF viewers. The tool runs entirely in your browser with no uploads. It is useful for numbering reports, manuals, legal documents, or any multi-page PDF that needs clear page references.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Stamps page number text onto each page using embedded standard fonts' },
@@ -490,6 +483,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'pdf-resize-pages': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Resize Pages tool changes the dimensions of PDF pages to standard sizes (A4, Letter, Legal, A3) or custom dimensions. Content is scaled proportionally to fit the new size. The tool uses pdf-lib to modify MediaBox dimensions, and the entire process runs locally in your browser. This is useful when you need to standardize page sizes across a document, prepare a PDF for a specific printer, or convert between paper formats.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Rescales page MediaBox dimensions to standard or custom sizes' },
@@ -526,95 +522,14 @@ export const toolContent: Record<string, ToolContent> = {
         ],
     },
 
-    'pdf-add-text': {
-        about: 'Modufile\'s Add Text tool lets you place custom text onto any page of a PDF with configurable font, size, color, and position. Live page previews are rendered using pdfjs-dist, allowing you to visually position text exactly where you need it before saving. The text is drawn using pdf-lib as native PDF text, so it remains fully searchable and selectable. The tool runs entirely in your browser. It is useful for adding notes, labels, headers, footers, or any custom text to existing PDF documents.',
-        techSetup: [
-            { library: 'pdf-lib', purpose: 'Draws text onto PDF pages with configurable font, size, and color' },
-            { library: 'pdfjs-dist', purpose: 'Renders live page previews on canvas for positioning text visually' },
-        ],
-        faqs: [
-            {
-                question: 'Can I choose the font for the added text?',
-                answer: 'Yes. You can select from standard PDF fonts including Helvetica, Times Roman, and Courier in regular and bold variants.',
-            },
-            {
-                question: 'Is the text searchable after adding?',
-                answer: 'Yes. Text is added as native PDF text objects, making it fully searchable and selectable in any PDF viewer.',
-            },
-            {
-                question: 'Can I position the text precisely?',
-                answer: 'Yes. The tool renders a live preview of each page, allowing you to click and place text at the exact position you want. You can also adjust coordinates manually.',
-            },
-            {
-                question: 'Can I add text to multiple pages?',
-                answer: 'Yes. You can navigate between pages and add text to any or all pages in the document.',
-            },
-            {
-                question: 'Does adding text change the existing content?',
-                answer: 'No. The text is layered on top of the existing page content. Nothing in the original document is modified or removed.',
-            },
-            {
-                question: 'Is the add text tool free?',
-                answer: 'Yes. It is completely free with no limits, no watermarks, and no sign-up. Processing runs locally in your browser.',
-            },
-            {
-                question: 'Can I use custom fonts?',
-                answer: 'Currently, only standard PDF fonts are supported (Helvetica, Times, Courier). Custom font uploads are not available at this time.',
-            },
-            {
-                question: 'Is my file uploaded to a server?',
-                answer: 'No. All processing happens in your browser. Your PDF never leaves your device.',
-            },
-        ],
-    },
-
-    'pdf-add-image': {
-        about: 'Modufile\'s Add Image tool lets you embed PNG or JPEG images into any page of a PDF document. You can set the exact position and size of the image using a live page preview rendered by pdfjs-dist. The image is embedded at full quality using pdf-lib. This is useful for adding a logo, stamp, signature image, or any visual element to an existing PDF. The tool runs entirely in your browser, so your files remain private.',
-        techSetup: [
-            { library: 'pdf-lib', purpose: 'Embeds PNG/JPEG images onto PDF pages at specified coordinates and dimensions' },
-            { library: 'pdfjs-dist', purpose: 'Renders live page previews on canvas for positioning images visually' },
-        ],
-        faqs: [
-            {
-                question: 'What image formats are supported?',
-                answer: 'PNG and JPEG images are supported for embedding into the PDF.',
-            },
-            {
-                question: 'Can I control the position and size?',
-                answer: 'Yes. You can set the X/Y coordinates and dimensions using the live preview. The image is embedded at full quality into the PDF.',
-            },
-            {
-                question: 'Can I add images to multiple pages?',
-                answer: 'Yes. You can navigate between pages and add images to any page in the document.',
-            },
-            {
-                question: 'Does adding an image affect the existing content?',
-                answer: 'No. The image is placed as an overlay on top of the existing page content. Nothing in the original document is modified or removed.',
-            },
-            {
-                question: 'Can I add a signature image to a PDF?',
-                answer: 'Yes. You can add a PNG image of your signature and position it precisely on the page. Using a PNG with a transparent background works best for a natural look.',
-            },
-            {
-                question: 'Is the add image tool free?',
-                answer: 'Yes. It is completely free with no limits, no watermarks, and no sign-up required.',
-            },
-            {
-                question: 'Is my file uploaded to a server?',
-                answer: 'No. All processing happens in your browser. Both your PDF and the image you add never leave your device.',
-            },
-            {
-                question: 'Can I add SVG or GIF images?',
-                answer: 'Currently, only PNG and JPEG formats are supported. Convert SVG or GIF images to PNG first using the Image Convert tool, then add them to your PDF.',
-            },
-        ],
-    },
-
     /* ------------------------------------------------------------------ */
     /*  IMAGE TOOLS                                                        */
     /* ------------------------------------------------------------------ */
 
     'image-convert': {
+        importance: 1,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s Image Convert tool lets you convert images between formats directly in your browser using ImageMagick compiled to WebAssembly. You can convert to and from JPG, PNG, WebP, and AVIF, with input support for additional formats including HEIC, TIFF, BMP, and more. Batch conversion is supported — drop multiple files and convert them all at once. Since everything runs locally, your images are never uploaded to any server. This makes it a privacy-safe alternative to online image converters, especially useful for converting HEIC photos from iPhones, preparing WebP or AVIF images for the web, or batch converting between common image formats.',
         techSetup: [
             { library: '@imagemagick/magick-wasm', purpose: 'Reads images in any format (HEIC, TIFF, BMP, etc.) and writes them in the target format (PNG, JPG, WebP, AVIF)' },
@@ -656,6 +571,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'image-compress': {
+        importance: 1,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s Image Compress tool reduces image file sizes by re-encoding them with adjustable quality settings. It uses ImageMagick compiled to WebAssembly, running entirely in your browser. You can control the compression level and preview the before-and-after comparison to find the right balance between file size and visual quality. Typical reductions are 40\u201380% without noticeable quality loss. This is ideal for optimizing images for websites, email attachments, or storage — all without uploading your photos to any server.',
         techSetup: [
             { library: '@imagemagick/magick-wasm', purpose: 'Re-encodes images with adjustable quality settings and optional resize for file size reduction' },
@@ -697,6 +615,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'image-resize': {
+        importance: 1,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s Image Resize tool lets you change image dimensions using high-quality Lanczos resampling provided by ImageMagick\'s WASM engine. You can resize to specific pixel dimensions while maintaining or overriding the aspect ratio. The tool also supports center cropping for precise framing. Everything runs locally in your browser, so your images are private. This is useful for preparing images for web uploads, social media profiles, print specifications, or any situation where specific dimensions are required.',
         techSetup: [
             { library: '@imagemagick/magick-wasm', purpose: 'Resizes images using Lanczos resampling and center-crops with configurable dimensions' },
@@ -738,6 +659,9 @@ export const toolContent: Record<string, ToolContent> = {
     },
 
     'image-batch': {
+        importance: 1,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s Batch Image Processor lets you chain multiple image operations — resize, grayscale, blur, rotate, flip, and format conversion — and apply them sequentially to a batch of images at once. It uses ImageMagick compiled to WebAssembly, running entirely in your browser. This is ideal for workflows where you need to process a set of images with the same pipeline — for example, resizing and converting a folder of product photos for an e-commerce site, or applying a grayscale filter and resize to a set of scanned documents.',
         techSetup: [
             { library: '@imagemagick/magick-wasm', purpose: 'Executes a configurable pipeline of operations (resize, grayscale, blur, rotate, flip) on each image' },
@@ -783,6 +707,9 @@ export const toolContent: Record<string, ToolContent> = {
     /* ------------------------------------------------------------------ */
 
     'ocr': {
+        importance: 1,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s OCR (Optical Character Recognition) tool extracts text from images using the Tesseract.js engine running in a Web Worker inside your browser. It supports over 100 languages, including English, Spanish, French, German, Chinese, Japanese, Arabic, and more. Since Tesseract.js runs entirely client-side, your images and extracted text never leave your device. This makes it a strong privacy-focused alternative to cloud-based OCR services. The tool is useful for digitizing scanned documents, extracting text from photos of printed material, or converting image-based content into editable text.',
         techSetup: [
             { library: 'tesseract.js', purpose: 'Runs the Tesseract OCR engine in a Web Worker to extract text from images with multi-language support' },
@@ -963,6 +890,9 @@ export const toolContent: Record<string, ToolContent> = {
     //     ],
     // },
     'pdf-compress': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Compress PDF tool reduces your PDF file size directly in your browser using the MuPDF rendering engine compiled to WebAssembly. It performs garbage collection, stream recompression, object deduplication, and removal of unused resources — optimizing the internal structure of the file without degrading visual quality. Since all processing happens client-side, your files are never uploaded to any server, making this a private and secure alternative to cloud-based PDF compressors like Smallpdf or Adobe\'s online tool. It works well for shrinking PDFs before email, upload, or archival.',
         techSetup: [
             { library: 'mupdf', purpose: 'WASM-based PDF engine that performs garbage collection, stream compression, and structural optimization' },
@@ -983,6 +913,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-unlock': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Unlock PDF tool removes password protection from encrypted PDF files entirely in your browser. You enter the correct document password, and the MuPDF engine authenticates the file and re-saves it without any encryption flags — producing an unlocked copy you can freely view, print, copy, and edit. Your password is never stored, transmitted, or logged anywhere. This tool does not bypass or crack encryption; it requires the legitimate password. The entire process runs client-side via WebAssembly, making it a secure and private way to remove PDF password protection.',
         techSetup: [
             { library: 'mupdf', purpose: 'Authenticates the PDF with your password and re-saves it without encryption flags' },
@@ -1001,6 +934,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-protect': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Protect PDF tool adds AES-256 encryption and password protection to your PDF files directly in your browser. You can set a user password (required to open and view the document) and an owner password (required to change permissions such as printing, copying, and editing). All encryption is performed client-side using the MuPDF engine compiled to WebAssembly — your files and passwords are never sent to any server. AES-256 is the strongest encryption standard supported by the PDF specification and is the same level used by financial and government institutions.',
         techSetup: [
             { library: 'mupdf', purpose: 'Applies AES-256 encryption with user and owner password support' },
@@ -1020,6 +956,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-repair': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s Repair PDF tool fixes corrupted or damaged PDF files by loading them through the MuPDF engine, which automatically reconstructs broken cross-reference tables, repairs invalid object streams, and resolves structural issues. The repaired PDF is then re-saved with full garbage collection, producing a clean, optimized file. This can recover PDFs that were truncated during download, corrupted during transfer, or damaged by software errors. The entire process runs locally in your browser via WebAssembly — your files are never uploaded to any server.',
         techSetup: [
             { library: 'mupdf', purpose: 'Automatically repairs corrupted xref tables, invalid objects, and structural damage during load, then re-saves with full optimization' },
@@ -1038,6 +977,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-pdfa': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s PDF/A Conversion tool transforms standard PDFs into archival-compliant PDF/A format — the ISO standard (ISO 19005) for long-term document preservation. PDF/A files embed all fonts, use standardized color spaces, and are fully self-contained, ensuring they render identically decades from now regardless of the software used to open them. The conversion is handled by the MuPDF engine running locally in your browser via WebAssembly. This format is required by many government agencies, courts, academic repositories, and corporate archival systems. Unlike server-based conversion tools, your documents never leave your device.',
         techSetup: [
             { library: 'mupdf', purpose: 'Processes the PDF to ensure font embedding, color profile standardization, and structural compliance with PDF/A requirements' },
@@ -1057,6 +999,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-scan': {
+        importance: 4,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['image/*'],
         about: 'Modufile\'s Scan to PDF tool lets you capture images from your device camera or upload photos from your gallery and combine them into a clean, multi-page PDF document. Built-in enhancement options include automatic contrast adjustment, grayscale conversion, and brightness correction — all processed locally using the HTML5 Canvas API. The final PDF is assembled using pdf-lib, embedding each processed image as a full page. No server is involved at any step. This is useful for quickly digitizing receipts, notes, whiteboards, or paper documents using just your phone browser.',
         techSetup: [
             { library: 'Canvas API', purpose: 'Applies image enhancements (contrast, grayscale, brightness) directly in the browser' },
@@ -1076,6 +1021,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-to-word': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s PDF to Word converter extracts text from your PDF using the MuPDF engine and generates an editable .docx file using the docx library. It analyzes font size data to detect headings and preserves basic paragraph structure. This tool works best with text-heavy, single-column PDFs. Complex layouts with tables, multi-column text, or heavy formatting may require manual adjustment after conversion. Since both MuPDF and the docx generator run in your browser via WebAssembly and JavaScript, your files are never uploaded to a server — unlike most online PDF to Word converters.',
         techSetup: [
             { library: 'mupdf', purpose: 'Extracts structured text with font metadata (size, position, style) from each PDF page' },
@@ -1096,6 +1044,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-to-excel': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s PDF to Excel tool extracts tabular data from PDFs and generates .xlsx spreadsheet files. It uses MuPDF to extract text blocks with precise position coordinates, then applies column detection based on X-coordinate clustering to reconstruct the original table structure. The resulting spreadsheet is built using SheetJS (xlsx library). This tool works best with PDFs containing clearly structured tables with consistent column alignment — such as financial statements, invoices, reports, and data exports. The entire process runs in your browser, so your files are never sent to a server.',
         techSetup: [
             { library: 'mupdf', purpose: 'Extracts text blocks with precise position coordinates from each PDF page' },
@@ -1115,6 +1066,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'office-to-pdf': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp'],
         about: 'Modufile\'s Office to PDF converter transforms Word, Excel, and PowerPoint files into PDF format using ZetaOffice — the full LibreOffice engine compiled to WebAssembly. This provides desktop-quality conversion fidelity, correctly handling tracked changes, footnotes, charts, embedded objects, complex formatting, and all the nuances that simpler converters miss. It supports DOCX, DOC, XLSX, XLS, PPTX, PPT, and their OpenDocument equivalents (ODT, ODS, ODP). The conversion engine (~50 MB) downloads once and is cached by the browser for instant subsequent use. Since everything runs client-side, your documents are never uploaded to a server — a significant privacy advantage over cloud-based converters.',
         techSetup: [
             { library: 'zetajs (ZetaOffice)', purpose: 'Full LibreOffice engine compiled to WebAssembly — handles all Office format conversions with desktop-quality fidelity' },
@@ -1135,6 +1089,9 @@ export const toolContent: Record<string, ToolContent> = {
 
 
     'pdf-ocr': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['application/pdf'],
         about: 'Modufile\'s OCR PDF tool makes scanned PDFs searchable by adding an invisible text layer to each page. It renders every page as a high-resolution image (200 DPI) using MuPDF, runs Tesseract.js optical character recognition to detect and position text, and writes the recognized words back into the PDF as an invisible overlay using pdf-lib. The original visual appearance is completely preserved while enabling full-text search, text selection, and copy-paste. This supports over 100 languages and runs entirely in your browser — your documents are never uploaded to any server. It is ideal for making scanned contracts, archived documents, and image-based PDFs searchable.',
         techSetup: [
             { library: 'mupdf', purpose: 'Renders each PDF page as a high-resolution image (200 DPI) for OCR input' },

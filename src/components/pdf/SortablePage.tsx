@@ -11,6 +11,8 @@ interface SortablePageProps {
     rotation: number;
     onRotate: () => void;
     onDelete: () => void;
+    label?: string;
+    size?: number;
 }
 
 export function SortablePage({
@@ -20,6 +22,8 @@ export function SortablePage({
     rotation,
     onRotate,
     onDelete,
+    label,
+    size,
 }: SortablePageProps) {
     const {
         attributes,
@@ -51,6 +55,8 @@ export function SortablePage({
                 rotation={rotation}
                 onRotate={onRotate}
                 onDelete={onDelete}
+                label={label}
+                size={size}
             />
         </div>
     );

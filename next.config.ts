@@ -1,10 +1,16 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const nextConfig: NextConfig = {
-  // Static export for Cloudflare Pages
-  output: 'export',
+  // Static export for Cloudflare Pages (only in production)
+  // In dev, we need the default server to support the headers() function below.
+  output: isProd ? 'export' : undefined,
   // Ensure paths match Cloudflare's directory structure (e.g. /about -> /about/index.html)
   trailingSlash: true,
+
+  // Silence Turbopack warning about missing turbopack config
+  turbopack: {},
 
   webpack: (config, { isServer, webpack }) => {
     // Stub Node.js built-ins for client-side builds
@@ -41,6 +47,9 @@ const nextConfig: NextConfig = {
 
   // Headers for WASM + SharedArrayBuffer support
   async headers() {
+    // In production, Cloudflare uses public/_headers, and Next.js static exports don't support headers()
+    if (isProd) return [];
+
     return [
       {
         source: '/(.*)',

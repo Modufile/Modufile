@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, RefreshCw } from 'lucide-react';
@@ -110,6 +111,15 @@ export default function ImageConvertPage() {
             about={toolContent['image-convert'].about}
             techSetup={toolContent['image-convert'].techSetup}
             faqs={toolContent['image-convert'].faqs}
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    onRemoveFile={(idx) => removeFile(files[idx].id)}
+                    onAddFiles={handleFilesAdded}
+                    acceptsMultipleFiles={toolContent['image-convert'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['image-convert'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Conversion Settings</h3>

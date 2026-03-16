@@ -16,7 +16,7 @@
 
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 
 /**
  * Sanitize a filename for safe download.
@@ -62,6 +62,15 @@ export function useOutputFilename(
 ): UseOutputFilenameReturn {
     const defaultName = generateDefault(inputFilename, suffix);
     const [outputFilename, setOutputFilename] = useState(defaultName);
+
+    // Auto-update when input file changes (e.g. new file dropped)
+    const prevDefaultRef = useRef(defaultName);
+    useEffect(() => {
+        if (defaultName !== prevDefaultRef.current) {
+            prevDefaultRef.current = defaultName;
+            setOutputFilename(defaultName);
+        }
+    }, [defaultName]);
 
     const sanitized = useMemo(
         () => sanitizeFilename(outputFilename) || 'output',

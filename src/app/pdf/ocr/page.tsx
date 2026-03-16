@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileText, X, ScanSearch, FileOutput, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -48,7 +48,7 @@ export default function OCRPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         setResult(null);
         try {
             const { PDFDocument } = await import('pdf-lib');
@@ -69,8 +69,8 @@ export default function OCRPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleOCR = useCallback(async () => {
-        if (!file) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file selected');
         setIsProcessing(true);
         setProgress('Loading OCR engine…');
         try {
@@ -104,41 +104,26 @@ export default function OCRPage() {
                 const pixmap = page.toPixmap(
                     mupdf.Matrix.scale(scale, scale),
                     mupdf.ColorSpace.DeviceRGB,
-                    false, // no alpha — 3-channel RGB
-                    true
+                    true,  // alpha — gives RGBA (4 channels) for direct ImageData use
+                    true,
                 );
 
                 const pw = pixmap.getWidth();
                 const ph = pixmap.getHeight();
-                const stride = pixmap.getStride();
-                const n = pixmap.getNumberOfComponents(); // 3 for RGB
-                const rawPixels = pixmap.getPixels();
+                const pixels = pixmap.getPixels();
 
-                // Canvas requires RGBA (4 channels), expand from RGB
+                // Create canvas from RGBA pixel data for Tesseract
                 const canvas = document.createElement('canvas');
                 canvas.width = pw;
                 canvas.height = ph;
                 const ctx = canvas.getContext('2d')!;
 
-                let rgba: Uint8ClampedArray;
-                if (n === 4) {
-                    rgba = new Uint8ClampedArray(rawPixels.slice());
-                } else {
-                    rgba = new Uint8ClampedArray(pw * ph * 4);
-                    for (let y = 0; y < ph; y++) {
-                        for (let x = 0; x < pw; x++) {
-                            const srcIdx = y * stride + x * n;
-                            const dstIdx = (y * pw + x) * 4;
-                            rgba[dstIdx] = rawPixels[srcIdx];
-                            rgba[dstIdx + 1] = rawPixels[srcIdx + 1];
-                            rgba[dstIdx + 2] = rawPixels[srcIdx + 2];
-                            rgba[dstIdx + 3] = 255;
-                        }
-                    }
-                }
+                // Copy pixels out of WASM heap before destroying pixmap
+                const pixelsCopy = new Uint8ClampedArray(pw * ph * 4);
+                pixelsCopy.set(pixels);
+                const imgData = new ImageData(pixelsCopy, pw, ph);
                 pixmap.destroy();
 
-                const imgData = new ImageData(new Uint8ClampedArray((rgba.buffer as ArrayBuffer).slice(0)), pw, ph);
                 ctx.putImageData(imgData, 0, 0);
 
                 const { data } = await worker.recognize(canvas);
@@ -170,21 +155,19 @@ export default function OCRPage() {
             doc.destroy();
 
             const pdfBytes = await pdfDoc.save();
-            setResult(new Blob([pdfBytes.slice()], { type: 'application/pdf' }));
+            const blob = new Blob([pdfBytes.slice()], { type: 'application/pdf' });
+            setResult(blob);
             setProgress('');
+            const base = file.name.replace(/\.pdf$/i, '');
+            return { blob, filename: `${base}-ocr.pdf` };
         } catch (err) {
             console.error('OCR failed:', err);
             setProgress('');
+            throw err;
         } finally {
             setIsProcessing(false);
         }
     }, [file, language]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result, `${base}-ocr.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-ocr'];
 
@@ -194,6 +177,18 @@ export default function OCRPage() {
             description="Make scanned PDFs searchable with optical character recognition"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Run OCR"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-ocr'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-ocr'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="space-y-6">
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -269,23 +264,12 @@ export default function OCRPage() {
                                 <FileOutput className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">OCR Complete!</h3>
-                            <p className="text-sm text-zinc-400 mb-4">Your PDF is now searchable.</p>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download Searchable PDF
-                            </button>
+                            <p className="text-sm text-zinc-400">Your PDF is now searchable.</p>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleOCR}
-                actionLabel={<><ScanSearch className="w-4 h-4" /> Run OCR</>}
-                subtitle={LANGUAGES.find(l => l.code === language)?.label}
-            />
         </ToolPageLayout>
     );
 }

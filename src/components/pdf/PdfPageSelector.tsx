@@ -3,15 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
+import { PDFJS_WORKER_SRC } from '@/lib/pdfjs-config';
 
 interface PdfPageSelectorProps {
     file: File;
     selectedIndices: Set<number>;
     onToggle: (index: number, isShiftKey: boolean) => void;
     mode?: 'merge' | 'separate' | 'single' | 'burst'; // For coloring logic
+    /** 'include' (default): selected = kept/highlighted. 'exclude': selected = marked for deletion. */
+    variant?: 'include' | 'exclude';
+    /** Thumbnail width in px. Default 150. */
+    thumbnailSize?: number;
 }
 
-export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge' }: PdfPageSelectorProps) {
+export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge', variant = 'include', thumbnailSize = 150 }: PdfPageSelectorProps) {
     const [pageCount, setPageCount] = useState<number>(0);
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [loadingProgress, setLoadingProgress] = useState(0);
@@ -24,7 +29,9 @@ export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge
             try {
                 //Dynamic import for pdfjs same as in redact page
                 const pdfjs = await import('pdfjs-dist');
-                pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+                if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+                    pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+                }
 
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
@@ -41,9 +48,7 @@ export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge
 
                     const page = await pdf.getPage(i);
                     const viewport = page.getViewport({ scale: 0.2 }); // Small scale for thumbnail using standard 72dpi
-                    // Adjust scale to match desired width (e.g. 150px)
-                    // Standard letter is ~600pt. 0.25 scale -> 150px.
-                    const desiredWidth = 150;
+                    const desiredWidth = 200; // Render at fixed quality; CSS handles display size
                     const scale = desiredWidth / page.getViewport({ scale: 1.0 }).width;
                     const scaledViewport = page.getViewport({ scale });
 
@@ -106,7 +111,10 @@ export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge
     };
 
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[60vh] overflow-y-auto p-2 bg-zinc-900/50 rounded-lg border border-zinc-800">
+        <div
+            className="grid gap-4 max-h-[60vh] overflow-y-auto p-2 bg-zinc-900/50 rounded-lg border border-zinc-800"
+            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}
+        >
             {loadingProgress < 100 && thumbnails.length === 0 && (
                 <div className="col-span-full text-center py-10 text-zinc-500">
                     Generating thumbnails... {loadingProgress}%
@@ -116,6 +124,45 @@ export function PdfPageSelector({ file, selectedIndices, onToggle, mode = 'merge
             {thumbnails.map((src, i) => {
                 const isSelected = selectedIndices.has(i);
                 const colorClass = isSelected ? getClusterColor(i) : '';
+
+                if (variant === 'exclude') {
+                    return (
+                        <div
+                            key={i}
+                            onClick={(e) => onToggle(i, e.shiftKey)}
+                            className={`
+                                relative group cursor-pointer transition-all duration-200
+                                rounded-lg overflow-hidden border-2
+                                ${isSelected ? 'border-red-500' : 'border-zinc-800 hover:border-zinc-600'}
+                            `}
+                        >
+                            <img src={src} alt={`Page ${i + 1}`} className="w-full h-auto object-contain bg-white" />
+
+                            {/* Red deletion overlay */}
+                            {isSelected && (
+                                <div className="absolute inset-0 bg-red-500/20 z-10 flex items-center justify-center">
+                                    <div className="w-9 h-9 rounded-full bg-red-500/80 flex items-center justify-center shadow-lg">
+                                        <X className="w-5 h-5 text-white" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Hover hint for unselected */}
+                            {!isSelected && (
+                                <div className="absolute inset-0 bg-red-500/0 group-hover:bg-red-500/8 transition-colors z-10" />
+                            )}
+
+                            <div className="absolute top-2 left-2 z-20">
+                                <div className={`
+                                    w-6 h-6 rounded flex items-center justify-center text-xs font-medium
+                                    ${isSelected ? 'bg-red-600 text-white shadow-md' : 'bg-zinc-800/90 text-zinc-400'}
+                                `}>
+                                    {i + 1}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
 
                 return (
                     <div

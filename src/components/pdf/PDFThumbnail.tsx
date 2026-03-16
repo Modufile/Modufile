@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { RotateCw, Trash2 } from 'lucide-react';
+import { PDFJS_WORKER_SRC } from '@/lib/pdfjs-config';
 
 interface PDFThumbnailProps {
     file: File;
@@ -10,9 +11,9 @@ interface PDFThumbnailProps {
     onRotate: () => void;
     onDelete: () => void;
     className?: string;
+    label?: string;
+    size?: number;
 }
-
-const WORKER_SRC = '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
 export function PDFThumbnail({
     file,
@@ -21,6 +22,8 @@ export function PDFThumbnail({
     onRotate,
     onDelete,
     className = '',
+    label,
+    size = 180,
 }: PDFThumbnailProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [loading, setLoading] = useState(true);
@@ -38,7 +41,7 @@ export function PDFThumbnail({
 
                 const pdfjs = await import('pdfjs-dist');
                 if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                    pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                    pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
                 }
 
                 const buf = await file.arrayBuffer();
@@ -51,7 +54,7 @@ export function PDFThumbnail({
                 if (!mounted) { doc.destroy(); return; }
 
                 const vp = page.getViewport({ scale: 1 });
-                const scale = 180 / vp.width;
+                const scale = size / vp.width;
                 const scaled = page.getViewport({ scale });
 
                 const canvas = canvasRef.current;
@@ -80,7 +83,9 @@ export function PDFThumbnail({
             mounted = false;
             try { renderTask?.cancel(); } catch { /* ignore */ }
         };
-    }, [file, pageIndex]);
+    }, [file, pageIndex, size]);
+
+    const displayLabel = label ?? `Page ${pageIndex + 1}`;
 
     return (
         <div className={`relative group ${className}`}>
@@ -89,12 +94,18 @@ export function PDFThumbnail({
                 style={{ transform: `rotate(${rotation}deg)` }}
             >
                 {loading && !error && (
-                    <div className="flex items-center justify-center w-[180px] h-[240px] bg-zinc-800">
+                    <div
+                        className="flex items-center justify-center bg-zinc-800"
+                        style={{ width: size, height: Math.round(size * 1.414) }}
+                    >
                         <div className="w-5 h-5 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
                     </div>
                 )}
                 {error && (
-                    <div className="flex items-center justify-center w-[180px] h-[240px] bg-zinc-800 text-red-400 text-xs text-center px-3">
+                    <div
+                        className="flex items-center justify-center bg-zinc-800 text-red-400 text-xs text-center px-3"
+                        style={{ width: size, height: Math.round(size * 1.414) }}
+                    >
                         {error}
                     </div>
                 )}
@@ -103,7 +114,6 @@ export function PDFThumbnail({
                     className={`block max-w-full h-auto mx-auto ${loading && !error ? 'hidden' : ''}`}
                 />
 
-                {/* Hover overlay with controls */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                     <button
                         type="button"
@@ -124,8 +134,8 @@ export function PDFThumbnail({
                 </div>
             </div>
 
-            <p className="mt-2 text-center text-xs text-zinc-500 select-none">
-                Page {pageIndex + 1}
+            <p className="mt-1.5 text-center text-[10px] text-zinc-500 select-none leading-tight">
+                {displayLabel}
             </p>
         </div>
     );

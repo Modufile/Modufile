@@ -4,12 +4,11 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Layers } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument } from 'pdf-lib';
 
 interface PDFFile {
@@ -30,7 +29,7 @@ export default function PDFFlattenPage() {
         if (!uploadedFile || uploadedFile.type !== 'application/pdf') return;
 
         setIsLoading(true);
-
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         try {
             const arrayBuffer = await uploadedFile.arrayBuffer();
             const pdfDoc = await PDFDocument.load(arrayBuffer);
@@ -63,8 +62,8 @@ export default function PDFFlattenPage() {
         setFile(null);
     }, []);
 
-    const handleFlatten = async () => {
-        if (!file) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file');
         setIsProcessing(true);
 
         try {
@@ -85,10 +84,8 @@ export default function PDFFlattenPage() {
 
             const bytes = await pdfDoc.save();
             const blob = new Blob([bytes as any], { type: 'application/pdf' });
-            downloadBlob(blob, `flattened_${file.name}`);
+            return { blob, filename: `flattened_${file.name}` };
 
-        } catch (error) {
-            console.error('Flatten failed:', error);
         } finally {
             setIsProcessing(false);
         }
@@ -103,17 +100,29 @@ export default function PDFFlattenPage() {
             about={toolContent['pdf-flatten'].about}
             techSetup={toolContent['pdf-flatten'].techSetup}
             faqs={toolContent['pdf-flatten'].faqs}
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Flatten Form Fields"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={removeFile}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-flatten'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-flatten'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
+                <>
                     <h3 className="text-sm font-medium text-zinc-100">Info</h3>
                     <p className="text-xs text-zinc-500">
                         Flattening a PDF merges form fields into the page content. This prevents further editing of the form data and ensures it prints correctly.
                     </p>
-                </div>
+                </>
             }
         >
             {isLoading ? (
-                <FileProcessingOverlay message="Analyzing form fields…" />
+                <FileProcessingOverlay message="Importing file..." />
             ) : !file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
@@ -148,18 +157,6 @@ export default function PDFFlattenPage() {
                     </div>
                 </motion.div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file}
-                isProcessing={isProcessing}
-                onAction={handleFlatten}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4" />
-                        Flatten Form Fields
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

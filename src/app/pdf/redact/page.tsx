@@ -4,14 +4,41 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Dropzone, FileProcessingOverlay, Logo } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, EyeOff, ChevronLeft, ChevronRight, Trash2, Search } from 'lucide-react';
+import { FileText, X, ChevronLeft, ChevronRight, Trash2, Search, ChevronDown, ChevronUp, ShieldOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
+
+interface Metadata {
+    title: string;
+    author: string;
+    subject: string;
+    keywords: string;
+    creator: string;
+    producer: string;
+    creationDate: string;
+    modificationDate: string;
+}
+
+const EmptyMetadata: Metadata = {
+    title: '', author: '', subject: '', keywords: '',
+    creator: '', producer: '', creationDate: '', modificationDate: '',
+};
+
+function dateToLocalInput(date: Date | null | undefined): string {
+    if (!date) return '';
+    try {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const h = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d}T${h}:${min}`;
+    } catch { return ''; }
+}
 
 interface PDFFile {
     name: string;
@@ -33,7 +60,7 @@ interface RedactRect {
     canvasHeight: number;
 }
 
-const WORKER_SRC = '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+import { PDFJS_WORKER_SRC } from '@/lib/pdfjs-config';
 
 export default function RedactPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
@@ -45,7 +72,12 @@ export default function RedactPage() {
     const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
     const [currentDraw, setCurrentDraw] = useState<{ x: number; y: number } | null>(null);
     const [pageRendered, setPageRendered] = useState(false);
-    const [redactColor, setRedactColor] = useState('#000000');
+
+    // Metadata
+    const [metadata, setMetadata] = useState<Metadata>(EmptyMetadata);
+    const [originalMetadata, setOriginalMetadata] = useState<Metadata>(EmptyMetadata);
+    const [stripMetadata, setStripMetadata] = useState(true);
+    const [metaExpanded, setMetaExpanded] = useState(true);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
@@ -60,7 +92,7 @@ export default function RedactPage() {
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         try {
             const arrayBuffer = await f.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(arrayBuffer);
+            const pdfDoc = await PDFDocument.load(arrayBuffer, { updateMetadata: false });
             setFile({
                 name: f.name,
                 file: f,
@@ -69,6 +101,21 @@ export default function RedactPage() {
             });
             setCurrentPage(0);
             setRedactAreas([]);
+
+            // Load existing metadata
+            const loaded: Metadata = {
+                title: pdfDoc.getTitle() || '',
+                author: pdfDoc.getAuthor() || '',
+                subject: pdfDoc.getSubject() || '',
+                keywords: pdfDoc.getKeywords() || '',
+                creator: pdfDoc.getCreator() || '',
+                producer: pdfDoc.getProducer() || '',
+                creationDate: dateToLocalInput(pdfDoc.getCreationDate()),
+                modificationDate: dateToLocalInput(pdfDoc.getModificationDate()),
+            };
+            setMetadata(loaded);
+            setOriginalMetadata(loaded);
+            setStripMetadata(true);
         } catch (err) {
             console.error('Failed to load PDF:', err);
         } finally {
@@ -94,7 +141,7 @@ export default function RedactPage() {
             setPageRendered(false);
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
             }
 
             if (!pdfDocRef.current) {
@@ -127,6 +174,9 @@ export default function RedactPage() {
         setFile(null);
         pdfDocRef.current?.destroy();
         pdfDocRef.current = null;
+        setMetadata(EmptyMetadata);
+        setOriginalMetadata(EmptyMetadata);
+        setStripMetadata(true);
     }, []);
 
     const [hoveredRedactId, setHoveredRedactId] = useState<string | null>(null);
@@ -301,7 +351,7 @@ export default function RedactPage() {
         try {
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
             }
 
             const results: { pageIndex: number, rects: any[] }[] = [];
@@ -325,7 +375,7 @@ export default function RedactPage() {
                 const itemMap: { index: number, startChar: number, endChar: number, item: any }[] = [];
 
                 for (const item of textContent.items as any[]) {
-                    // Normalize checking: insert space if items are far apart? 
+                    // Normalize checking: insert space if items are far apart?
                     // For now, simple concatenation. Ideally check relative coords for spaces.
                     // Or usually PDF text items might have spaces at end.
                     const startChar = fullText.length;
@@ -337,7 +387,7 @@ export default function RedactPage() {
                         endChar: startChar + str.length,
                         item
                     });
-                    // Heuristic: If x distance > char width, append space? 
+                    // Heuristic: If x distance > char width, append space?
                     // Let's rely on PDF content often having spaces or being separate words.
                     // A safer "Find" often ignores whitespace differences or strictly matches chars.
                     // Let's stick to strict char sequence for now, but maybe ignore case.
@@ -444,7 +494,7 @@ export default function RedactPage() {
                         width: r.width,
                         height: r.height,
                         canvasWidth: viewport.width,
-                        canvasHeight: viewport.height
+                        canvasHeight: viewport.height,
                     });
                 });
             }
@@ -458,7 +508,6 @@ export default function RedactPage() {
 
 
 
-
     const applySearchResults = () => {
         // This function is superseded by handleApplyAll which is async.
         // Kept as a no-op to avoid dead references.
@@ -467,8 +516,8 @@ export default function RedactPage() {
 
 
 
-    const handleSave = async () => {
-        if (!file || redactAreas.length === 0) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file || redactAreas.length === 0) throw new Error('No file or no redactions');
         setIsProcessing(true);
 
         try {
@@ -480,7 +529,7 @@ export default function RedactPage() {
             // Also import pdfjs for coordinate conversion
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-                pdfjs.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
             }
             const pdfjsDoc = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
 
@@ -495,11 +544,6 @@ export default function RedactPage() {
                 list.push(r);
                 redactsByPage.set(r.pageIndex, list);
             });
-
-            // Parse hex color once
-            const cr = parseInt(redactColor.slice(1, 3), 16) / 255;
-            const cg = parseInt(redactColor.slice(3, 5), 16) / 255;
-            const cb = parseInt(redactColor.slice(5, 7), 16) / 255;
 
             // Iterate over pages that have redactions
             for (const [pageIndex, areas] of redactsByPage) {
@@ -538,21 +582,53 @@ export default function RedactPage() {
 
                     const annot = page.createAnnotation('Redact');
                     annot.setRect(annotRect);
-                    annot.setColor([cr, cg, cb]);
+                    annot.update();
                 }
 
-                page.applyRedactions();
+                // applyRedactions args: blackBoxes, imageMethod, lineArtMethod, textMethod
+                // 2=none (remove images entirely), 1=none (remove line art), 0=none (remove text)
+                page.applyRedactions(true, 2, 1, 0);
             }
 
-            // Save the document
-            const reducedBuffer = doc.saveToBuffer('garbage=4,compress');
-            const asUint8 = reducedBuffer.asUint8Array();
+            // Apply metadata via MuPDF before saving
+            // Keys follow the 'info:Field' convention; 'xml' clears the XMP metadata stream
+            if (stripMetadata) {
+                const STRIP_KEYS = [
+                    'info:Title', 'info:Author', 'info:Subject', 'info:Keywords',
+                    'info:Creator', 'info:Producer', 'info:CreationDate', 'info:ModDate',
+                ];
+                for (const key of STRIP_KEYS) {
+                    try { docGeneric.setMetaData(key, ''); } catch { /* field may not exist */ }
+                }
+                // Clear XMP metadata stream
+                try { docGeneric.setMetaData('xml', ''); } catch { /* may not be present */ }
+            } else {
+                // Apply any user-edited metadata fields
+                const META_MAP: [keyof Metadata, string][] = [
+                    ['title', 'info:Title'], ['author', 'info:Author'],
+                    ['subject', 'info:Subject'], ['keywords', 'info:Keywords'],
+                    ['creator', 'info:Creator'], ['producer', 'info:Producer'],
+                ];
+                for (const [field, key] of META_MAP) {
+                    try { docGeneric.setMetaData(key, metadata[field]); } catch { /* ignore */ }
+                }
+            }
 
-            const blob = new Blob([asUint8 as any], { type: 'application/pdf' });
-            downloadBlob(blob, file.name.replace('.pdf', '_redacted.pdf'));
+            // Save with full garbage collection + stream sanitization
+            // garbage=deduplicate: removes all unreferenced objects (eliminates revision history)
+            // clean: rewrites all content streams (removes hidden operators, old data)
+            // sanitize: validates/sanitizes PDF operators (prevents stream-level data leaks)
+            // This ensures NO redacted content remains anywhere in the file byte stream
+            const reducedBuffer = doc.saveToBuffer('garbage=deduplicate,compress,clean,sanitize');
+            const bytes = new Uint8Array(reducedBuffer.asUint8Array());
+            docGeneric.destroy();
+
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            return { blob, filename: file.name.replace('.pdf', '_redacted.pdf') };
         } catch (err) {
             console.error('Failed to redact:', err);
             alert('Failed to redact PDF. Please check console for details.');
+            throw err;
         } finally {
             setIsProcessing(false);
         }
@@ -567,27 +643,24 @@ export default function RedactPage() {
             about={toolContent['pdf-redact'].about}
             techSetup={toolContent['pdf-redact'].techSetup}
             faqs={toolContent['pdf-redact'].faqs}
+            onSave={file && redactAreas.length > 0 ? handleSave : undefined}
+            saveDisabled={!file || redactAreas.length === 0 || isProcessing}
+            saveLabel="Apply Redactions"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={removeFile}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-redact'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-redact'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
+                <>
                     <h3 className="text-sm font-medium text-zinc-100">Redaction</h3>
                     <p className="text-xs text-zinc-500">
                         Click and drag over areas you want to redact. Redactions are professionally applied, permanently removing underlying text and images.
                     </p>
-
-                    <div>
-                        <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Redact Color</label>
-                        <div className="flex gap-2">
-                            {['#000000', '#FFFFFF', '#FF0000', '#808080'].map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => setRedactColor(c)}
-                                    className={`w-8 h-8 rounded-md border-2 transition-all ${redactColor === c ? 'border-[#3A76F0] scale-110' : 'border-zinc-600'
-                                        }`}
-                                    style={{ backgroundColor: c }}
-                                />
-                            ))}
-                        </div>
-                    </div>
 
                     {/* Search UI */}
                     <div className="mb-6 pt-4 border-t border-zinc-800">
@@ -676,16 +749,78 @@ export default function RedactPage() {
                         </div>
                     )}
 
-                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                        <p className="text-xs text-emerald-400">
-                            🔒 <strong>Professional Redaction.</strong> Content under the redaction bars is permanently removed from the file. Text and images are scrubbed from the internal data stream and cannot be recovered.
-                        </p>
+                    {/* Metadata Section */}
+                    <div className="pt-4 border-t border-zinc-800">
+                        <button
+                            onClick={() => setMetaExpanded(v => !v)}
+                            className="w-full flex items-center justify-between text-sm font-medium text-zinc-100 mb-2"
+                        >
+                            <span className="flex items-center gap-2">
+                                <ShieldOff className="w-3.5 h-3.5 text-zinc-400" />
+                                Metadata
+                            </span>
+                            {metaExpanded ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />}
+                        </button>
+
+                        {metaExpanded && (
+                            <div className="space-y-3">
+                                {/* Strip All toggle */}
+                                <div className="flex items-center justify-between p-2.5 bg-zinc-800/60 rounded-lg border border-zinc-700/50">
+                                    <div>
+                                        <p className="text-xs font-medium text-zinc-200">Strip All Metadata</p>
+                                        <p className="text-[10px] text-zinc-500 mt-0.5">Remove title, author, dates, XMP stream</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setStripMetadata(v => !v)}
+                                        className={`relative w-9 h-5 rounded-full transition-colors ${stripMetadata ? 'bg-[#3A76F0]' : 'bg-zinc-700'}`}
+                                    >
+                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${stripMetadata ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                {/* Individual fields */}
+                                {!stripMetadata && (() => {
+                                    const inputCls = "w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-100 focus:outline-none focus:border-[#3A76F0]";
+                                    const fields: { key: keyof Metadata; label: string; type?: string }[] = [
+                                        { key: 'title', label: 'Title' },
+                                        { key: 'author', label: 'Author' },
+                                        { key: 'subject', label: 'Subject' },
+                                        { key: 'keywords', label: 'Keywords' },
+                                        { key: 'creator', label: 'Creator' },
+                                        { key: 'producer', label: 'Producer' },
+                                        { key: 'creationDate', label: 'Creation Date', type: 'datetime-local' },
+                                        { key: 'modificationDate', label: 'Mod. Date', type: 'datetime-local' },
+                                    ];
+                                    return (
+                                        <div className="space-y-2">
+                                            {fields.map(({ key, label, type }) => (
+                                                <div key={key}>
+                                                    <label className="text-[10px] text-zinc-500 uppercase font-medium mb-1 block">{label}</label>
+                                                    <input
+                                                        type={type || 'text'}
+                                                        value={metadata[key]}
+                                                        onChange={(e) => setMetadata(prev => ({ ...prev, [key]: e.target.value }))}
+                                                        className={inputCls}
+                                                    />
+                                                </div>
+                                            ))}
+                                            <button
+                                                onClick={() => setMetadata(originalMetadata)}
+                                                className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors text-left mt-1"
+                                            >
+                                                Reset to original
+                                            </button>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
                     </div>
-                </div>
+                </>
             }
         >
             {isLoading ? (
-                <FileProcessingOverlay message="Loading PDF…" />
+                <FileProcessingOverlay message="Importing file..." />
             ) : !file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
@@ -813,9 +948,8 @@ export default function RedactPage() {
                                         >
                                             {/* Main Box */}
                                             <div
-                                                className={`w-full h-full transition-all duration-200 ${isActive ? 'ring-2 ring-[#3A76F0] shadow-lg' : ''
-                                                    }`}
-                                                style={{ backgroundColor: redactColor, opacity: isActive ? 0.7 : 0.85 }}
+                                                className={`w-full h-full transition-all duration-200 bg-black ${isActive ? 'ring-2 ring-[#3A76F0] shadow-lg' : ''}`}
+                                                style={{ opacity: isActive ? 0.7 : 0.85 }}
                                             />
 
                                             {/* Label Tag */}
@@ -869,13 +1003,12 @@ export default function RedactPage() {
                                 const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
                                 return (
                                     <div
-                                        className="absolute border-2 border-dashed border-red-500"
+                                        className="absolute border-2 border-dashed border-red-500 bg-black"
                                         style={{
                                             left: Math.min(drawStart.x, currentDraw.x) * canvasToCssX,
                                             top: Math.min(drawStart.y, currentDraw.y) * canvasToCssY,
                                             width: Math.abs(currentDraw.x - drawStart.x) * canvasToCssX,
                                             height: Math.abs(currentDraw.y - drawStart.y) * canvasToCssY,
-                                            backgroundColor: redactColor,
                                             opacity: 0.4,
                                         }}
                                     />
@@ -887,18 +1020,6 @@ export default function RedactPage() {
                     </div>
                 </motion.div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && redactAreas.length > 0}
-                isProcessing={isProcessing}
-                onAction={handleSave}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <EyeOff className="w-4 h-4" />
-                        Apply Redaction ({redactAreas.length} area{redactAreas.length !== 1 ? 's' : ''})
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

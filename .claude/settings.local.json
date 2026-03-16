@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cd /o/CreativeCoding/modufile/public/wasm/pymupdf && npm pack @bentopdf/pymupdf-wasm@0.11.14 2>&1)",
-      "Bash(cd /o/CreativeCoding/modufile/public/wasm/pymupdf && tar xzf bentopdf-pymupdf-wasm-0.11.14.tgz && mv package/* . && rm -rf package bentopdf-pymupdf-wasm-0.11.14.tgz build_scripts 2>&1)",
-      "WebFetch(domain:modufile.com)"
-    ]
-  }
-}

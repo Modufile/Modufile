@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
-import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ToolPageLayout, type AppliedChange } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Maximize } from 'lucide-react';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
+import { FileText, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument } from 'pdf-lib';
 
 interface PDFFile {
@@ -31,6 +32,8 @@ const PRESETS: { value: PagePreset; label: string; width: number; height: number
     { value: 'a5', label: 'A5 (148 × 210mm)', width: 419.53, height: 595.28 },
 ];
 
+const ptToMm = (pt: number) => Math.round(pt * 0.3528 * 10) / 10;
+
 export default function ResizePagesPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -41,10 +44,14 @@ export default function ResizePagesPage() {
     const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
     const [scaleContent, setScaleContent] = useState(true);
 
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(
+        file?.name || 'output.pdf', '_resized'
+    );
+
     const handleFileAdded = useCallback(async (files: File[]) => {
         const f = files[0];
         if (!f) return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         try {
             const arrayBuffer = await f.arrayBuffer();
             const pdfDoc = await PDFDocument.load(arrayBuffer);
@@ -89,8 +96,8 @@ export default function ResizePagesPage() {
         return orientation === 'landscape' ? { width: h, height: w } : { width: w, height: h };
     };
 
-    const handleSave = async () => {
-        if (!file) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file');
         setIsProcessing(true);
 
         try {
@@ -103,23 +110,21 @@ export default function ResizePagesPage() {
                 const { width: oldW, height: oldH } = page.getSize();
 
                 if (scaleContent) {
-                    // Scale content to fit new dimensions
                     const scaleX = target.width / oldW;
                     const scaleY = target.height / oldH;
                     page.setSize(target.width, target.height);
                     page.scaleContent(scaleX, scaleY);
                 } else {
-                    // Just change the media box size (content stays at original position)
                     page.setSize(target.width, target.height);
                 }
             }
 
             const bytes = await pdfDoc.save();
             const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
-            downloadBlob(blob, file.name.replace('.pdf', '_resized.pdf'));
+            return { blob, filename: sanitized };
         } catch (err) {
             console.error('Failed to resize pages:', err);
-            alert('Failed to process PDF.');
+            throw err;
         } finally {
             setIsProcessing(false);
         }
@@ -127,7 +132,27 @@ export default function ResizePagesPage() {
 
     const target = getTargetDimensions();
 
-    const ptToMm = (pt: number) => Math.round(pt * 0.3528 * 10) / 10;
+    const appliedChanges = useMemo<AppliedChange[]>(() => {
+        if (!file) return [];
+        const list: AppliedChange[] = [];
+        if (preset !== 'a4') {
+            const label = preset === 'custom' ? 'Custom dimensions' : (PRESETS.find(p => p.value === preset)?.label ?? preset);
+            list.push({ id: 'preset', description: `Page size: ${label}`, onUndo: () => setPreset('a4') });
+        }
+        if (orientation !== 'portrait') {
+            list.push({ id: 'orientation', description: 'Orientation: Landscape', onUndo: () => setOrientation('portrait') });
+        }
+        if (!scaleContent) {
+            list.push({ id: 'scaleContent', description: 'Scale content: off', onUndo: () => setScaleContent(true) });
+        }
+        return list;
+    }, [file, preset, orientation, scaleContent]);
+
+    const handleReset = useCallback(() => {
+        setPreset('a4');
+        setOrientation('portrait');
+        setScaleContent(true);
+    }, []);
 
     return (
         <ToolPageLayout
@@ -138,21 +163,37 @@ export default function ResizePagesPage() {
             about={toolContent['pdf-resize-pages'].about}
             techSetup={toolContent['pdf-resize-pages'].techSetup}
             faqs={toolContent['pdf-resize-pages'].faqs}
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Resize Pages"
+            appliedChanges={appliedChanges}
+            onResetChanges={handleReset}
+            isProcessing={isProcessing}
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: file.pageCount }] : []}
+                    onRemoveFile={removeFile}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-resize-pages'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-resize-pages'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
-                    <h3 className="text-sm font-medium text-zinc-100">Page Size</h3>
-
+                <>
                     {file && (
-                        <div className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-                            <p className="text-xs text-zinc-500 mb-1">Current Size</p>
+                        <div className="mt-3 space-y-0.5">
+                            <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Current Size</span>
                             <p className="text-sm text-zinc-300">
                                 {ptToMm(file.currentWidth)} × {ptToMm(file.currentHeight)} mm
                             </p>
                         </div>
                     )}
 
-                    <div>
-                        <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Preset</label>
+                    <div className="space-y-3 mt-3">
+                        <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Target Size</span>
+
                         <select
                             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
                             value={preset}
@@ -163,37 +204,41 @@ export default function ResizePagesPage() {
                             ))}
                             <option value="custom">Custom Dimensions</option>
                         </select>
+
+                        {preset === 'custom' && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-zinc-500 mb-1 block">Width (pt)</label>
+                                    <input
+                                        type="number"
+                                        min="72"
+                                        max="3000"
+                                        value={customWidth}
+                                        onChange={(e) => setCustomWidth(Number(e.target.value))}
+                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-500 mb-1 block">Height (pt)</label>
+                                    <input
+                                        type="number"
+                                        min="72"
+                                        max="3000"
+                                        value={customHeight}
+                                        onChange={(e) => setCustomHeight(Number(e.target.value))}
+                                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <p className="text-xs text-zinc-500">
+                            Target: {ptToMm(target.width)} × {ptToMm(target.height)} mm
+                        </p>
                     </div>
 
-                    {preset === 'custom' && (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="text-xs text-zinc-500 mb-1 block">Width (pt)</label>
-                                <input
-                                    type="number"
-                                    min="72"
-                                    max="3000"
-                                    value={customWidth}
-                                    onChange={(e) => setCustomWidth(Number(e.target.value))}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs text-zinc-500 mb-1 block">Height (pt)</label>
-                                <input
-                                    type="number"
-                                    min="72"
-                                    max="3000"
-                                    value={customHeight}
-                                    onChange={(e) => setCustomHeight(Number(e.target.value))}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Orientation</label>
+                    <div className="space-y-2 mt-3">
+                        <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Orientation</span>
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={() => setOrientation('portrait')}
@@ -216,7 +261,7 @@ export default function ResizePagesPage() {
                         </div>
                     </div>
 
-                    <label className="flex items-center gap-3 cursor-pointer">
+                    <label className="flex items-center gap-3 cursor-pointer mt-3">
                         <input
                             type="checkbox"
                             checked={scaleContent}
@@ -224,18 +269,10 @@ export default function ResizePagesPage() {
                             className="accent-[#3A76F0] rounded"
                         />
                         <div>
-                            <span className="text-sm text-zinc-300">Scale content to fit</span>
-                            <p className="text-xs text-zinc-500 mt-0.5">Stretch or shrink content to match the new page size.</p>
+                            <span className="text-sm text-zinc-300">Scale content to fit new page size</span>
                         </div>
                     </label>
-
-                    <div className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-                        <p className="text-xs text-zinc-500 mb-1">Target Size</p>
-                        <p className="text-sm text-zinc-300">
-                            {ptToMm(target.width)} × {ptToMm(target.height)} mm
-                        </p>
-                    </div>
-                </div>
+                </>
             }
         >
             {isLoading ? (
@@ -272,18 +309,6 @@ export default function ResizePagesPage() {
                     </button>
                 </motion.div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file}
-                isProcessing={isProcessing}
-                onAction={handleSave}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <Maximize className="w-4 h-4" />
-                        Resize Pages
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

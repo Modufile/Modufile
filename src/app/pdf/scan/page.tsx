@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileProcessingOverlay } from '@/components/ui';
@@ -87,6 +88,15 @@ export default function ScanToPdfPage() {
             description="Capture images from your camera or gallery and create a PDF document"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={[]}
+                    onRemoveFile={() => { }}
+                    onAddFiles={handleFiles}
+                    acceptsMultipleFiles={toolContent['pdf-scan'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-scan'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="space-y-6">
                     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">

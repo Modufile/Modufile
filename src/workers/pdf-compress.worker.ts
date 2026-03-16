@@ -40,9 +40,12 @@ async function handleCompress(operationId: string, payload: any) {
 
     ctx.postMessage({ type: 'progress', operationId, percent: 50, stage: 'compressing' });
 
+    // Subset unused font glyphs for smaller output
+    doc.subsetFonts();
+
     // MuPDF compression: garbage collection + stream compression
-    const buffer = doc.saveToBuffer('garbage=4,compress,clean,linearize');
-    const result = buffer.asUint8Array().slice();
+    const buffer = doc.saveToBuffer('garbage=deduplicate,compress,clean,compress-fonts,compress-images');
+    const result = new Uint8Array(buffer.asUint8Array());
 
     doc.destroy();
     ctx.postMessage({ type: 'progress', operationId, percent: 100, stage: 'complete' });

@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "copy:wasm": "node -e \"const fs=require('fs');const p=require('path');['mupdf.js','mupdf-wasm.js','mupdf-wasm.wasm'].forEach(f=>{const src=p.join('node_modules','mupdf','dist',f);const dst=p.join('public',f);if(fs.existsSync(src)){fs.copyFileSync(src,dst);console.log('Copied',f,'to public/')}else{console.warn(f,'not found at',src)}})\"",
+    "copy:wasm": "node scripts/copy-wasm.js",
     "predev": "npm run copy:wasm",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "prebuild": "npm run copy:wasm",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "deploy": "next build --webpack && npx wrangler pages deploy out"
+  },
+  "optionalDependencies": {
+    "@bentopdf/gs-wasm": "^0.1.1",
+    "@bentopdf/pymupdf-wasm": "^0.11.14"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -19,7 +23,6 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@imagemagick/magick-wasm": "^0.0.38",
-    "@supabase/supabase-js": "^2.95.3",
     "clsx": "^2.1.1",
     "docx": "^9.5.3",
     "fflate": "^0.8.2",

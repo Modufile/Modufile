@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
-import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ToolPageLayout, type AppliedChange } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Scissors, Layers, Copy, Combine } from 'lucide-react';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
+import { Scissors, Layers, Combine, ZoomIn, ZoomOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob, downloadMultipleAsZip } from '@/lib/core/download';
 import { PdfPageSelector } from '@/components/pdf/PdfPageSelector';
 
@@ -29,13 +29,19 @@ export default function PDFSplitPage() {
     const [splitMode, setSplitMode] = useState<SplitMode>('separate');
     const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+    const [thumbnailSize, setThumbnailSize] = useState(150);
+    const THUMB_MIN = 80, THUMB_MAX = 260, THUMB_STEP = 20;
+
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(
+        file?.name || 'output.pdf', '_split'
+    );
 
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const uploadedFile = newFiles[0];
         if (!uploadedFile || uploadedFile.type !== 'application/pdf') return;
 
         setIsLoading(true);
-
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         try {
             const { PDFDocument } = await import('pdf-lib');
             const arrayBuffer = await uploadedFile.arrayBuffer();
@@ -99,7 +105,7 @@ export default function PDFSplitPage() {
         setLastSelectedIndex(index);
     };
 
-    const handleSplit = async () => {
+    const handleSave = async (): Promise<void> => {
         if (!file) return;
         setIsProcessing(true);
 
@@ -122,11 +128,11 @@ export default function PDFSplitPage() {
                     const bytes = await newDoc.save();
                     const blob = new Blob([bytes as any], { type: 'application/pdf' });
                     outputFiles.push({
-                        name: `${file.name.replace('.pdf', '')}_page_${i + 1}.pdf`,
+                        name: `${sanitized.replace('.pdf', '')}_page_${i + 1}.pdf`,
                         blob
                     });
                 }
-                await downloadMultipleAsZip(outputFiles, `${file.name.replace('.pdf', '')}_burst`);
+                await downloadMultipleAsZip(outputFiles, `${sanitized.replace('.pdf', '')}_burst`);
             }
             // Mode 2: Merge (One file for all selected)
             else if (splitMode === 'merge') {
@@ -135,7 +141,7 @@ export default function PDFSplitPage() {
                 copiedPages.forEach(p => newDoc.addPage(p));
                 const bytes = await newDoc.save();
                 const blob = new Blob([bytes as any], { type: 'application/pdf' });
-                downloadBlob(blob, `split_${file.name}`);
+                downloadBlob(blob, sanitized);
             }
             // Mode 3: Separate (Clusters)
             else if (splitMode === 'separate') {
@@ -162,7 +168,7 @@ export default function PDFSplitPage() {
                     copiedPages.forEach(p => newDoc.addPage(p));
                     const bytes = await newDoc.save();
                     const blob = new Blob([bytes as any], { type: 'application/pdf' });
-                    downloadBlob(blob, `split_${file.name}`);
+                    downloadBlob(blob, sanitized);
                 } else {
                     const outputFiles: { name: string, blob: Blob }[] = [];
                     for (let i = 0; i < clusters.length; i++) {
@@ -179,11 +185,11 @@ export default function PDFSplitPage() {
                             : `pg${cluster[0] + 1}`;
 
                         outputFiles.push({
-                            name: `${file.name.replace('.pdf', '')}_${rangeName}.pdf`,
+                            name: `${sanitized.replace('.pdf', '')}_${rangeName}.pdf`,
                             blob
                         });
                     }
-                    await downloadMultipleAsZip(outputFiles, `${file.name.replace('.pdf', '')}_split`);
+                    await downloadMultipleAsZip(outputFiles, `${sanitized.replace('.pdf', '')}_split`);
                 }
             }
 
@@ -194,104 +200,162 @@ export default function PDFSplitPage() {
         }
     };
 
+    const appliedChanges = useMemo<AppliedChange[]>(() => {
+        const list: AppliedChange[] = [];
+        if (splitMode !== 'separate') {
+            list.push({ id: 'mode', description: `Split mode: ${splitMode}`, onUndo: () => setSplitMode('separate') });
+        }
+        if (selectedPages.size > 0) {
+            list.push({
+                id: 'selection',
+                description: `${selectedPages.size} page${selectedPages.size !== 1 ? 's' : ''} selected`,
+                onUndo: () => setSelectedPages(new Set()),
+            });
+        }
+        return list;
+    }, [splitMode, selectedPages]);
+
+    const handleReset = useCallback(() => {
+        setSplitMode('separate');
+        setSelectedPages(new Set());
+    }, []);
+
     return (
         <ToolPageLayout
-            title="Split PDF"
-            description="Break your PDF into smaller documents by selecting pages."
+            title="Split / Extract PDF"
+            description="Split into separate files or extract any selection of pages."
             parentCategory="PDF Tools"
             parentHref="/pdf"
             about={toolContent['pdf-split'].about}
             techSetup={toolContent['pdf-split'].techSetup}
             faqs={toolContent['pdf-split'].faqs}
+            onSave={file && selectedPages.size > 0 ? handleSave : undefined}
+            saveDisabled={!file || selectedPages.size === 0 || isProcessing}
+            saveLabel="Split / Extract"
+            centerControls={
+                <div className="flex items-center gap-1 bg-[#1F1F22] rounded border border-zinc-800/60 p-0.5 h-8">
+                    <button
+                        onClick={() => setThumbnailSize(s => Math.max(THUMB_MIN, s - THUMB_STEP))}
+                        disabled={thumbnailSize <= THUMB_MIN}
+                        className="p-1 rounded text-zinc-400 hover:text-white transition-colors disabled:opacity-30"
+                        title="Smaller thumbnails"
+                    >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[11px] text-zinc-400 font-medium w-10 text-center">{thumbnailSize}px</span>
+                    <button
+                        onClick={() => setThumbnailSize(s => Math.min(THUMB_MAX, s + THUMB_STEP))}
+                        disabled={thumbnailSize >= THUMB_MAX}
+                        className="p-1 rounded text-zinc-400 hover:text-white transition-colors disabled:opacity-30"
+                        title="Larger thumbnails"
+                    >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            }
+            appliedChanges={appliedChanges}
+            onResetChanges={handleReset}
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: file.pageCount }] : []}
+                    onRemoveFile={removeFile}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-split'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-split'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
-                    <h3 className="text-sm font-medium text-zinc-100">Split Options</h3>
-
-                    {/* Mode Selector */}
-                    <div className="space-y-3">
-                        <label className="text-xs text-zinc-500 uppercase font-medium">Output Mode</label>
-                        <div className="grid grid-cols-1 gap-2">
-                            <button
-                                onClick={() => setSplitMode('merge')}
-                                className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'merge'
-                                    ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
-                                    : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
-                                    }`}
-                            >
-                                <Combine className="w-5 h-5 shrink-0 mt-0.5" />
-                                <div>
-                                    <span className="block font-medium mb-0.5">Merge Selected</span>
-                                    <span className="text-xs opacity-80">Save all selected pages as one single file.</span>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={() => setSplitMode('separate')}
-                                className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'separate'
-                                    ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
-                                    : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
-                                    }`}
-                            >
-                                <Scissors className="w-5 h-5 shrink-0 mt-0.5" />
-                                <div>
-                                    <span className="block font-medium mb-0.5">Separate Clusters</span>
-                                    <span className="text-xs opacity-80">Save each range (e.g. 1-3, 5-7) as a separate file.</span>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={() => setSplitMode('burst')}
-                                className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'burst'
-                                    ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
-                                    : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
-                                    }`}
-                            >
-                                <Layers className="w-5 h-5 shrink-0 mt-0.5" />
-                                <div>
-                                    <span className="block font-medium mb-0.5">Burst All</span>
-                                    <span className="text-xs opacity-80">Save every selected page as its own PDF.</span>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-
+                <>
                     <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs text-zinc-500 uppercase font-medium block">
-                                Selected Pages
-                            </label>
-                            <span className="text-xs font-mono text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">
-                                {selectedPages.size} / {file?.pageCount || 0}
-                            </span>
-                        </div>
+                        <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Split Options</span>
 
-                        {file && (
-                            <div className="flex gap-2">
+                        {/* Mode Selector */}
+                        <div className="space-y-3 mt-3">
+                            <div className="grid grid-cols-1 gap-2">
                                 <button
-                                    onClick={() => {
-                                        const all = new Set<number>();
-                                        for (let i = 0; i < file.pageCount; i++) all.add(i);
-                                        setSelectedPages(all);
-                                    }}
-                                    className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded border border-zinc-700 transition delay-75"
+                                    onClick={() => setSplitMode('merge')}
+                                    className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'merge'
+                                        ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
+                                        : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
+                                        }`}
                                 >
-                                    All
+                                    <Combine className="w-5 h-5 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="block font-medium mb-0.5">Merge Selected</span>
+                                        <span className="text-xs opacity-80">Save all selected pages as one single file.</span>
+                                    </div>
                                 </button>
+
                                 <button
-                                    onClick={() => setSelectedPages(new Set())}
-                                    className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded border border-zinc-700 transition delay-75"
+                                    onClick={() => setSplitMode('separate')}
+                                    className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'separate'
+                                        ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
+                                        : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
+                                        }`}
                                 >
-                                    None
+                                    <Scissors className="w-5 h-5 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="block font-medium mb-0.5">Separate Clusters</span>
+                                        <span className="text-xs opacity-80">Save each range (e.g. 1-3, 5-7) as a separate file.</span>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => setSplitMode('burst')}
+                                    className={`p-3 text-sm rounded-lg border transition-all flex items-start text-left gap-3 ${splitMode === 'burst'
+                                        ? 'bg-[#3A76F0]/10 border-[#3A76F0] text-[#3A76F0]'
+                                        : 'bg-zinc-800 border-transparent text-zinc-400 hover:bg-zinc-700'
+                                        }`}
+                                >
+                                    <Layers className="w-5 h-5 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="block font-medium mb-0.5">Extract All Pages</span>
+                                        <span className="text-xs opacity-80">Save every selected page as its own PDF.</span>
+                                    </div>
                                 </button>
                             </div>
-                        )}
+                        </div>
+
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs text-zinc-500 uppercase font-medium block">
+                                    Selected Pages
+                                </label>
+                                <span className="text-xs font-mono text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">
+                                    {selectedPages.size} / {file?.pageCount || 0}
+                                </span>
+                            </div>
+
+                            {file && (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => {
+                                            const all = new Set<number>();
+                                            for (let i = 0; i < file.pageCount; i++) all.add(i);
+                                            setSelectedPages(all);
+                                        }}
+                                        className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded border border-zinc-700 transition delay-75"
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedPages(new Set())}
+                                        className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded border border-zinc-700 transition delay-75"
+                                    >
+                                        None
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
+                </>
             }
         >
             <AnimatePresence mode="wait">
                 {isLoading ? (
-                    <FileProcessingOverlay message="Reading PDF pages…" />
+                    <FileProcessingOverlay message="Importing file..." />
                 ) : !file ? (
                     <Dropzone
                         onFilesAdded={handleFileAdded}
@@ -301,63 +365,22 @@ export default function PDFSplitPage() {
                 ) : (
                     <div className="space-y-4">
                         <motion.div
-                            className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-between"
+                            className="space-y-4"
                             initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.3, ease: 'easeOut' }}
                         >
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
-                                    <FileText className="w-6 h-6 text-red-500" />
-                                </div>
-                                <div>
-                                    <h3 className="font-medium text-zinc-100">{file.name}</h3>
-                                    <p className="text-sm text-zinc-500">
-                                        {formatFileSize(file.size)} • {file.pageCount} pages
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={removeFile}
-                                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5 text-zinc-500 hover:text-red-500" />
-                            </button>
+                            <PdfPageSelector
+                                file={file.file}
+                                selectedIndices={selectedPages}
+                                onToggle={handlePageToggle}
+                                mode={splitMode}
+                                thumbnailSize={thumbnailSize}
+                            />
                         </motion.div>
-
-                        <PdfPageSelector
-                            file={file.file}
-                            selectedIndices={selectedPages}
-                            onToggle={handlePageToggle}
-                            mode={splitMode}
-                        />
                     </div>
                 )}
             </AnimatePresence>
-
-            <FloatingActionBar
-                isVisible={!!file && selectedPages.size > 0}
-                isProcessing={isProcessing}
-                onAction={handleSplit}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        {splitMode === 'merge' && <Combine className="w-4 h-4" />}
-                        {splitMode === 'separate' && <Scissors className="w-4 h-4" />}
-                        {splitMode === 'burst' && <Layers className="w-4 h-4" />}
-
-                        {splitMode === 'merge' && 'Merge Selected'}
-                        {splitMode === 'separate' && 'Separate Clusters'}
-                        {splitMode === 'burst' && 'Burst Pages'}
-                    </div>
-                }
-                subtitle={
-                    splitMode === 'burst'
-                        ? `Creates ${selectedPages.size} files`
-                        : splitMode === 'separate'
-                            ? 'Creates files for each group' // could calculate number of clusters if needed
-                            : 'Creates 1 file'
-                }
-            />
         </ToolPageLayout>
     );
 }

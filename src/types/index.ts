@@ -4,23 +4,6 @@
  */
 
 // ============================================
-// User & Auth Types
-// ============================================
-
-export type SubscriptionTier = 'free' | 'pro';
-
-export interface UserProfile {
-    id: string;
-    email: string;
-    tier: SubscriptionTier;
-    quotas: {
-        dailyConversions: number;
-        maxFileSize: number; // in bytes
-        maxBatchSize: number;
-    };
-}
-
-// ============================================
 // Workspace Types
 // ============================================
 
@@ -97,7 +80,6 @@ export interface ToolDefinition {
 // ============================================
 
 export interface AppState {
-    user: UserProfile | null;
     activeTool: ToolDefinition | null;
     workspace: WorkspaceState;
     isOnline: boolean;
@@ -107,18 +89,6 @@ export interface AppState {
 // ============================================
 // Service Interfaces (Layer 4 Contracts)
 // ============================================
-
-/**
- * Auth Service Interface
- * UI components use this, never vendor SDKs directly
- */
-export interface IAuthService {
-    getCurrentUser(): Promise<UserProfile | null>;
-    signInWithEmail(email: string, password: string): Promise<UserProfile>;
-    signInWithOAuth(provider: 'google' | 'github'): Promise<UserProfile>;
-    signOut(): Promise<void>;
-    onAuthStateChange(callback: (user: UserProfile | null) => void): () => void;
-}
 
 /**
  * Storage Service Interface
@@ -132,12 +102,3 @@ export interface IStorageService {
     clearAll(): Promise<void>;
 }
 
-/**
- * Database Service Interface
- * For Supabase/Postgres operations
- */
-export interface IDatabaseService {
-    logUsage(toolId: string, fileCount: number, bytesProcessed: number): Promise<void>;
-    getFeatureFlags(): Promise<Record<string, boolean>>;
-    getUserTier(userId: string): Promise<SubscriptionTier>;
-}

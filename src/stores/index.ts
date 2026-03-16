@@ -3,4 +3,3 @@
  */
 
 export { useWorkspaceStore } from './workspace';
-export { useAuthStore } from './auth';

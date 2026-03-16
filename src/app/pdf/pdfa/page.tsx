@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Archive, CheckCircle } from 'lucide-react';
+import { FileText, X, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -31,7 +31,7 @@ export default function PDFAPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         setResult(null);
         try {
             const { PDFDocument } = await import('pdf-lib');
@@ -52,32 +52,31 @@ export default function PDFAPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleConvert = useCallback(async () => {
-        if (!file) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file selected');
         setIsProcessing(true);
         try {
             const mupdf = await loadMuPDF();
             const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf').asPDF();
+            const genDoc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
+            const doc = genDoc.asPDF();
             if (!doc) throw new Error('Not a valid PDF');
 
-            const outBuf = doc.saveToBuffer('garbage=4,compress,clean');
-            const bytes = outBuf.asUint8Array().slice();
-            doc.destroy();
+            const outBuf = doc.saveToBuffer('garbage=deduplicate,compress,clean,appearance=all');
+            const bytes = new Uint8Array(outBuf.asUint8Array());
+            genDoc.destroy();
 
-            setResult(new Blob([bytes], { type: 'application/pdf' }));
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            setResult(blob);
+            const base = file.name.replace(/\.pdf$/i, '');
+            return { blob, filename: `${base}-pdfa.pdf` };
         } catch (err) {
             console.error('PDF/A conversion failed:', err);
+            throw err;
         } finally {
             setIsProcessing(false);
         }
     }, [file]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result, `${base}-pdfa.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-pdfa'];
 
@@ -87,8 +86,20 @@ export default function PDFAPage() {
             description="Convert your PDF to archival-compliant PDF/A format"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Convert to PDF/A"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-pdfa'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-pdfa'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <>
                     <h3 className="font-medium text-sm text-zinc-100 mb-3">About PDF/A</h3>
                     <ul className="space-y-3 text-sm text-zinc-400">
                         <li>📁 <strong className="text-zinc-200">Long-term archival</strong> — ISO standard for document preservation</li>
@@ -96,7 +107,7 @@ export default function PDFAPage() {
                         <li>🎨 <strong className="text-zinc-200">Color profiles</strong> — Standardized color spaces</li>
                         <li>🏛️ <strong className="text-zinc-200">Compliance</strong> — Required by many government and legal institutions</li>
                     </ul>
-                </div>
+                </>
             }
             about={content?.about}
             techSetup={content?.techSetup}
@@ -138,22 +149,12 @@ export default function PDFAPage() {
                                 <CheckCircle className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">PDF/A Ready!</h3>
-                            <p className="text-sm text-zinc-400 mb-4">Your PDF has been converted to archival format.</p>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download PDF/A
-                            </button>
+                            <p className="text-sm text-zinc-400">Your PDF has been converted to archival format.</p>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleConvert}
-                actionLabel={<><Archive className="w-4 h-4" /> Convert to PDF/A</>}
-            />
         </ToolPageLayout>
     );
 }

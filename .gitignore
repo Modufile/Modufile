@@ -1,6 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# =============================================================================
+# Modufile — .gitignore
+# =============================================================================
 
-# dependencies
+# ---- Dependencies -----------------------------------------------------------
 /node_modules
 /.pnp
 .pnp.*
@@ -10,46 +12,93 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# ---- Next.js build output ---------------------------------------------------
 /.next/
 /out/
-
-# production
 /build
 
-# misc
-.DS_Store
-*.pem
+# ---- Environment / secrets --------------------------------------------------
+.env
+.env.*
+!.env.example
 
-# debug
+# ---- OS & editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.pem
+.vscode/
+.idea/
+"New folder"/
+
+# ---- Logs & debug -----------------------------------------------------------
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# ---- TypeScript -------------------------------------------------------------
 *.tsbuildinfo
 next-env.d.ts
 
-# Playwright
-node_modules/
+# ---- Test output ------------------------------------------------------------
+/coverage
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
 
+# ---- Deployment (Vercel/Cloudflare) -----------------------------------------
+.vercel
 
-# Reference (inspiration, not part of the project)
+# ---- Internal AI / dev tooling (not for public repo) -----------------------
+.claude/
+CLAUDE.md
+design.md
+tsc_errors.txt
+tsc.log
+/.agents/
+/docs/
+
+# ---- One-time dev/fix scripts -----------------------------------------------
+fix_*.js
+tools_update.js
+
+# ---- Reference / local scratch ----------------------------------------------
 /reference/
 /local_assets/
-/local_assets/*
+
+# =============================================================================
+# WASM & large vendored binary assets
+#
+# These are NOT committed because they are either:
+#   a) copied from node_modules via `npm run copy:wasm` (MuPDF, pdf.js), or
+#   b) downloaded from vendor CDN / npm package (Ghostscript, PyMuPDF, Zeta)
+#
+# After cloning, run:
+#   npm install
+#   npm run copy:wasm
+#
+# The /public/wasm/*/dist/ loader stubs ARE committed (small hand-written JS).
+# =============================================================================
+
+# MuPDF — copied from node_modules/mupdf/dist/ by `npm run copy:wasm`
+/public/mupdf.js
+/public/mupdf-wasm.js
+/public/mupdf-wasm.wasm
+
+# PDF.js worker — copied from node_modules/pdfjs-dist/build/ by `npm run copy:wasm`
+/public/pdf.worker.min.js
+
+# ImageMagick WASM (14 MB)
+/public/magick.wasm
+
+# Ghostscript WASM — installed via npm (@bentopdf/gs-wasm), copied by npm run copy:wasm
+/public/wasm/gs/
+
+# PyMuPDF / Pyodide WASM — installed via npm (@bentopdf/pymupdf-wasm), copied by npm run copy:wasm
+/public/wasm/pymupdf/
+
+# Zeta / LibreOffice WASM (soffice.js 858 KB + soffice.data.js.metadata + zeta.js)
+/public/zeta/

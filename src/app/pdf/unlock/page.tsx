@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Unlock, Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
+import { FileText, X, Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -33,7 +33,7 @@ export default function UnlockPdfPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         setResult(null);
         setError(null);
         setPassword('');
@@ -48,7 +48,7 @@ export default function UnlockPdfPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleUnlock = useCallback(async () => {
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string } | void> => {
         if (!file) return;
         setIsProcessing(true);
         setError(null);
@@ -58,8 +58,8 @@ export default function UnlockPdfPage() {
             const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
 
             if (doc.needsPassword()) {
-                const ok = doc.authenticatePassword(password);
-                if (!ok) {
+                const authResult = doc.authenticatePassword(password);
+                if (authResult === 0) {
                     setError('Incorrect password. Please try again.');
                     doc.destroy();
                     setIsProcessing(false);
@@ -70,11 +70,17 @@ export default function UnlockPdfPage() {
             const pdfDoc = doc.asPDF();
             if (!pdfDoc) throw new Error('Not a valid PDF');
 
-            const outBuf = pdfDoc.saveToBuffer('garbage=4,compress,clean');
-            const bytes = outBuf.asUint8Array().slice();
+            // Save without encryption (decrypt flag removes password)
+            const outBuf = pdfDoc.saveToBuffer('garbage=deduplicate,compress,clean,decrypt');
+            const bytes = new Uint8Array(outBuf.asUint8Array());
             doc.destroy();
 
-            setResult(new Blob([bytes], { type: 'application/pdf' }));
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            setResult(blob);
+
+            const base = file.name.replace(/\.pdf$/i, '');
+            const filename = `${base}-unlocked.pdf`;
+            return { blob, filename };
         } catch (err) {
             setError('Failed to unlock PDF. The file may be corrupted.');
             console.error('Unlock failed:', err);
@@ -82,12 +88,6 @@ export default function UnlockPdfPage() {
             setIsProcessing(false);
         }
     }, [file, password]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result, `${base}-unlocked.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-unlock'];
 
@@ -97,15 +97,27 @@ export default function UnlockPdfPage() {
             description="Remove password protection from your PDF files"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing || !password}
+            saveLabel="Unlock PDF"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-unlock'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-unlock'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <>
                     <h3 className="font-medium text-sm text-zinc-100 mb-3">How it works</h3>
                     <ul className="space-y-3 text-sm text-zinc-400">
                         <li>🔐 <strong className="text-zinc-200">Enter password</strong> — provide the PDF&apos;s password</li>
                         <li>🔓 <strong className="text-zinc-200">Decrypt</strong> — MuPDF authenticates and decrypts</li>
                         <li>💾 <strong className="text-zinc-200">Save clean copy</strong> — re-saved without encryption</li>
                     </ul>
-                </div>
+                </>
             }
             about={content?.about}
             techSetup={content?.techSetup}
@@ -170,22 +182,11 @@ export default function UnlockPdfPage() {
                                 <CheckCircle className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">PDF Unlocked!</h3>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download Unlocked PDF
-                            </button>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleUnlock}
-                actionLabel={<><Unlock className="w-4 h-4" /> Unlock PDF</>}
-                disabled={!password}
-            />
         </ToolPageLayout>
     );
 }

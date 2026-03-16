@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
-import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ToolPageLayout, type AppliedChange } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Tag } from 'lucide-react';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
+import { FileText, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument } from 'pdf-lib';
 
 interface PDFFile {
@@ -42,18 +42,38 @@ const EmptyMetadata: Metadata = {
     modificationDate: ''
 };
 
+function dateToLocalInput(date: Date | null | undefined): string {
+    if (!date) return '';
+    try {
+        // Format as YYYY-MM-DDTHH:mm for datetime-local input
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const h = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d}T${h}:${min}`;
+    } catch {
+        return '';
+    }
+}
+
 export default function PDFMetadataPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [metadata, setMetadata] = useState<Metadata>(EmptyMetadata);
+    const [originalMetadata, setOriginalMetadata] = useState<Metadata>(EmptyMetadata);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(
+        file?.name || 'output.pdf', '_metadata'
+    );
 
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const uploadedFile = newFiles[0];
         if (!uploadedFile || uploadedFile.type !== 'application/pdf') return;
 
         setIsLoading(true);
-
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         try {
             const arrayBuffer = await uploadedFile.arrayBuffer();
             const pdfDoc = await PDFDocument.load(arrayBuffer, { updateMetadata: false });
@@ -66,18 +86,18 @@ export default function PDFMetadataPage() {
                 pageCount: pdfDoc.getPageCount()
             });
 
-            // Read Metadata
-            setMetadata({
+            const loaded: Metadata = {
                 title: pdfDoc.getTitle() || '',
                 author: pdfDoc.getAuthor() || '',
                 subject: pdfDoc.getSubject() || '',
                 keywords: pdfDoc.getKeywords() || '',
                 creator: pdfDoc.getCreator() || '',
                 producer: pdfDoc.getProducer() || '',
-                creationDate: pdfDoc.getCreationDate()?.toISOString() || '',
-                modificationDate: pdfDoc.getModificationDate()?.toISOString() || ''
-            });
-
+                creationDate: dateToLocalInput(pdfDoc.getCreationDate()),
+                modificationDate: dateToLocalInput(pdfDoc.getModificationDate()),
+            };
+            setMetadata(loaded);
+            setOriginalMetadata(loaded);
         } catch (error) {
             console.error('Failed to load PDF', error);
         } finally {
@@ -85,7 +105,6 @@ export default function PDFMetadataPage() {
         }
     }, []);
 
-    // Check for files coming from homepage dropzone
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
     useEffect(() => {
         if (source === 'homepage' && storedFiles.length > 0) {
@@ -97,21 +116,21 @@ export default function PDFMetadataPage() {
     const removeFile = useCallback(() => {
         setFile(null);
         setMetadata(EmptyMetadata);
+        setOriginalMetadata(EmptyMetadata);
     }, []);
 
     const updateField = (field: keyof Metadata, value: string) => {
         setMetadata(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleSave = async () => {
-        if (!file) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file');
         setIsProcessing(true);
 
         try {
             const arrayBuffer = await file.file.arrayBuffer();
             const pdfDoc = await PDFDocument.load(arrayBuffer);
 
-            // Set Metadata
             if (metadata.title) pdfDoc.setTitle(metadata.title);
             if (metadata.author) pdfDoc.setAuthor(metadata.author);
             if (metadata.subject) pdfDoc.setSubject(metadata.subject);
@@ -119,51 +138,94 @@ export default function PDFMetadataPage() {
             if (metadata.creator) pdfDoc.setCreator(metadata.creator);
             if (metadata.producer) pdfDoc.setProducer(metadata.producer);
 
-            pdfDoc.setModificationDate(new Date());
+            // Set creation date if provided
+            if (metadata.creationDate) {
+                pdfDoc.setCreationDate(new Date(metadata.creationDate));
+            }
+
+            // Set modification date — use user input or current time
+            if (metadata.modificationDate) {
+                pdfDoc.setModificationDate(new Date(metadata.modificationDate));
+            } else {
+                pdfDoc.setModificationDate(new Date());
+            }
 
             const bytes = await pdfDoc.save();
             const blob = new Blob([bytes as any], { type: 'application/pdf' });
-            downloadBlob(blob, `metadata_${file.name}`);
-
+            return { blob, filename: sanitized };
         } catch (error) {
             console.error('Metadata save failed:', error);
+            throw error;
         } finally {
             setIsProcessing(false);
         }
     };
 
+    const FIELD_LABELS: Record<keyof Metadata, string> = {
+        title: 'Title',
+        author: 'Author',
+        subject: 'Subject',
+        keywords: 'Keywords',
+        creator: 'Creator',
+        producer: 'Producer',
+        creationDate: 'Creation Date',
+        modificationDate: 'Modification Date',
+    };
+
+    const appliedChanges = useMemo<AppliedChange[]>(() => {
+        if (!file) return [];
+        return (Object.keys(metadata) as (keyof Metadata)[])
+            .filter(key => metadata[key] !== originalMetadata[key])
+            .map(key => ({
+                id: key,
+                description: `${FIELD_LABELS[key]}: "${String(metadata[key]).slice(0, 30)}${String(metadata[key]).length > 30 ? '…' : ''}"`,
+                onUndo: () => setMetadata(prev => ({ ...prev, [key]: originalMetadata[key] })),
+            }));
+    }, [file, metadata, originalMetadata]);
+
+    const handleReset = useCallback(() => {
+        setMetadata(originalMetadata);
+    }, [originalMetadata]);
+
+    const inputClass = "w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]";
+
     return (
         <ToolPageLayout
             title="Edit Metadata"
-            description="View and modify hidden PDF properties like Title, Author, and Keywords."
+            description="View and modify hidden PDF properties like Title, Author, Keywords, and Dates."
             parentCategory="PDF Tools"
             parentHref="/pdf"
             about={toolContent['pdf-metadata'].about}
             techSetup={toolContent['pdf-metadata'].techSetup}
             faqs={toolContent['pdf-metadata'].faqs}
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Update Metadata"
+            appliedChanges={appliedChanges}
+            onResetChanges={handleReset}
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={removeFile}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-metadata'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-metadata'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
+                <>
                     <h3 className="text-sm font-medium text-zinc-100">Info</h3>
                     <p className="text-xs text-zinc-500">
                         Metadata helps search engines and operating systems organize your files.
+                        All fields are optional.
                     </p>
-                    {metadata.creationDate && (
-                        <div className="text-xs text-zinc-500">
-                            <span className="block font-medium text-zinc-400">Created</span>
-                            {new Date(metadata.creationDate).toLocaleString()}
-                        </div>
-                    )}
-                    {metadata.modificationDate && (
-                        <div className="text-xs text-zinc-500">
-                            <span className="block font-medium text-zinc-400">Modified</span>
-                            {new Date(metadata.modificationDate).toLocaleString()}
-                        </div>
-                    )}
-                </div>
+                </>
             }
         >
             {isLoading ? (
-                <FileProcessingOverlay message="Reading metadata…" />
+                <FileProcessingOverlay message="Importing file..." />
             ) : !file ? (
                 <Dropzone
                     onFilesAdded={handleFileAdded}
@@ -185,14 +247,11 @@ export default function PDFMetadataPage() {
                             <div>
                                 <h3 className="font-medium text-zinc-100">{file.name}</h3>
                                 <p className="text-sm text-zinc-500">
-                                    {formatFileSize(file.size)} • {file.pageCount} pages
+                                    {formatFileSize(file.size)} · {file.pageCount} pages
                                 </p>
                             </div>
                         </div>
-                        <button
-                            onClick={removeFile}
-                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                        >
+                        <button onClick={removeFile} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
                             <X className="w-5 h-5 text-zinc-500 hover:text-red-500" />
                         </button>
                     </div>
@@ -201,75 +260,58 @@ export default function PDFMetadataPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Title</label>
-                                <input
-                                    type="text"
-                                    value={metadata.title}
-                                    onChange={(e) => updateField('title', e.target.value)}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.title} onChange={(e) => updateField('title', e.target.value)} className={inputClass} />
                             </div>
                             <div>
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Author</label>
-                                <input
-                                    type="text"
-                                    value={metadata.author}
-                                    onChange={(e) => updateField('author', e.target.value)}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.author} onChange={(e) => updateField('author', e.target.value)} className={inputClass} />
                             </div>
                             <div className="md:col-span-2">
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Subject</label>
-                                <input
-                                    type="text"
-                                    value={metadata.subject}
-                                    onChange={(e) => updateField('subject', e.target.value)}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.subject} onChange={(e) => updateField('subject', e.target.value)} className={inputClass} />
                             </div>
                             <div className="md:col-span-2">
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Keywords</label>
-                                <input
-                                    type="text"
-                                    value={metadata.keywords}
-                                    onChange={(e) => updateField('keywords', e.target.value)}
-                                    placeholder="Separated by commas"
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.keywords} onChange={(e) => updateField('keywords', e.target.value)} placeholder="Separated by commas" className={inputClass} />
                             </div>
                             <div>
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Creator</label>
-                                <input
-                                    type="text"
-                                    value={metadata.creator}
-                                    onChange={(e) => updateField('creator', e.target.value)}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.creator} onChange={(e) => updateField('creator', e.target.value)} className={inputClass} />
                             </div>
                             <div>
                                 <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Producer</label>
-                                <input
-                                    type="text"
-                                    value={metadata.producer}
-                                    onChange={(e) => updateField('producer', e.target.value)}
-                                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
-                                />
+                                <input type="text" value={metadata.producer} onChange={(e) => updateField('producer', e.target.value)} className={inputClass} />
+                            </div>
+                        </div>
+
+                        {/* Date fields */}
+                        <div className="border-t border-zinc-800 pt-6">
+                            <h4 className="text-sm font-medium text-zinc-100 mb-4">Dates</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Creation Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={metadata.creationDate}
+                                        onChange={(e) => updateField('creationDate', e.target.value)}
+                                        className={inputClass}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-500 uppercase font-medium mb-2 block">Modification Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={metadata.modificationDate}
+                                        onChange={(e) => updateField('modificationDate', e.target.value)}
+                                        className={inputClass}
+                                    />
+                                    <p className="text-xs text-zinc-600 mt-1">Leave empty to use current time on save.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </motion.div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file}
-                isProcessing={isProcessing}
-                onAction={handleSave}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4" />
-                        Update Metadata
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

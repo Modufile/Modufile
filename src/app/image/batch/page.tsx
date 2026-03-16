@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Image as ImageIcon, X, Plus, Trash2, ArrowRight } from 'lucide-react';
@@ -149,6 +150,15 @@ export default function ImageBatchPage() {
             about={toolContent['image-batch'].about}
             techSetup={toolContent['image-batch'].techSetup}
             faqs={toolContent['image-batch'].faqs}
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    onRemoveFile={(idx) => removeFile(files[idx].id)}
+                    onAddFiles={handleFilesAdded}
+                    acceptsMultipleFiles={toolContent['image-batch'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['image-batch'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-lg space-y-6">
                     <h3 className="text-sm font-medium text-zinc-100">Operation Pipeline</h3>

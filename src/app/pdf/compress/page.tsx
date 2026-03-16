@@ -4,12 +4,11 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, Minimize2, CheckCircle } from 'lucide-react';
+import { FileText, X, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -33,6 +32,7 @@ export default function CompressPdfPage() {
         if (!f || f.type !== 'application/pdf') return;
         setIsLoading(true);
         setResult(null);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         try {
             const { PDFDocument } = await import('pdf-lib');
             const buf = await f.arrayBuffer();
@@ -52,34 +52,34 @@ export default function CompressPdfPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleCompress = useCallback(async () => {
-        if (!file) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file) throw new Error('No file selected');
         setIsProcessing(true);
         try {
             const mupdf = await loadMuPDF();
             const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf').asPDF();
+            const genDoc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
+            const doc = genDoc.asPDF();
             if (!doc) throw new Error('Not a valid PDF');
 
-            const outBuf = doc.saveToBuffer('garbage=4,compress,clean,linearize');
-            const bytes = outBuf.asUint8Array().slice();
-            doc.destroy();
+            // Subset unused font glyphs for smaller output
+            doc.subsetFonts();
+
+            const outBuf = doc.saveToBuffer('garbage=deduplicate,compress,clean,compress-fonts,compress-images');
+            const bytes = new Uint8Array(outBuf.asUint8Array());
+            genDoc.destroy();
 
             const compressed = new Blob([bytes], { type: 'application/pdf' });
             const savings = Math.round((1 - compressed.size / file.size) * 100);
             setResult({ blob: compressed, savings: Math.max(0, savings) });
-        } catch (err) {
-            console.error('Compression failed:', err);
+
+            const base = file.name.replace(/\.pdf$/i, '');
+            const filename = `${base}-compressed.pdf`;
+            return { blob: compressed, filename };
         } finally {
             setIsProcessing(false);
         }
     }, [file]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result.blob, `${base}-compressed.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-compress'];
 
@@ -89,8 +89,20 @@ export default function CompressPdfPage() {
             description="Reduce your PDF file size without losing quality"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Compress PDF"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-compress'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-compress'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <>
                     <h3 className="font-medium text-sm text-zinc-100 mb-3">How it works</h3>
                     <ul className="space-y-3 text-sm text-zinc-400">
                         <li>🗑️ <strong className="text-zinc-200">Garbage collection</strong> — removes unused objects</li>
@@ -98,7 +110,7 @@ export default function CompressPdfPage() {
                         <li>🔗 <strong className="text-zinc-200">Deduplication</strong> — merges duplicate resources</li>
                         <li>📐 <strong className="text-zinc-200">Linearization</strong> — optimizes for web viewing</li>
                     </ul>
-                </div>
+                </>
             }
             about={content?.about}
             techSetup={content?.techSetup}
@@ -136,7 +148,7 @@ export default function CompressPdfPage() {
                     {result && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                             className="bg-zinc-900 border border-green-800/50 rounded-xl p-6">
-                            <div className="flex items-center gap-4 mb-4">
+                            <div className="flex items-center gap-4">
                                 <div className="p-3 bg-green-500/10 rounded-full">
                                     <CheckCircle className="w-6 h-6 text-green-400" />
                                 </div>
@@ -148,21 +160,11 @@ export default function CompressPdfPage() {
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download Compressed PDF
-                            </button>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleCompress}
-                actionLabel={<><Minimize2 className="w-4 h-4" /> Compress PDF</>}
-            />
         </ToolPageLayout>
     );
 }

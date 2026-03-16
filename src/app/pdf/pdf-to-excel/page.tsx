@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { Table, X, FileOutput, AlertTriangle, AlertCircle } from 'lucide-react';
@@ -139,6 +140,15 @@ export default function PDFToExcelPage() {
             description="Extract tabular data from your PDF into spreadsheets"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-to-excel'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-to-excel'].acceptedFileTypes}
+                />
+            }
             sidebar={
                 <div className="space-y-6">
                     <div className="bg-amber-500/5 border border-amber-800/30 rounded-xl p-4">

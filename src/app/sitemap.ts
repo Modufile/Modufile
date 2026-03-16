@@ -36,7 +36,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'yearly',
             priority: 0.5,
         },
-        ...['extract', 'split', 'merge', 'rotate', 'organize', 'remove-pages', 'resize-pages', 'watermark', 'page-numbers', 'add-text', 'add-image', 'flatten', 'redact', 'metadata'].map((tool) => ({
+        ...['split', 'merge', 'rotate', 'organize', 'remove-pages', 'resize-pages', 'watermark', 'page-numbers', 'flatten', 'redact', 'metadata'].map((tool) => ({
             url: `${baseUrl}/pdf/${tool}`,
             lastModified: new Date(),
             changeFrequency: 'monthly' as const,

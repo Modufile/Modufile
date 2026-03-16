@@ -12,14 +12,11 @@ import {
     Github,
     Layers,
     RotateCw,
-    FolderInput,
     Stamp,
     Tag,
     Scaling,
     RefreshCw,
     X,
-    Type,
-    ImagePlus,
     EyeOff,
     Hash,
     Maximize,
@@ -75,15 +72,6 @@ export const TOOLS = [
         gradient: 'from-red-500/10 to-transparent'
     },
     {
-        title: 'Extract Pages',
-        description: 'Create a new PDF from selected pages.',
-        href: '/pdf/extract',
-        icon: FolderInput,
-        iconColor: '#ef4444',
-        category: 'PDF',
-        gradient: 'from-red-500/10 to-transparent'
-    },
-    {
         title: 'Watermark',
         description: 'Add text overlay to your documents.',
         href: '/pdf/watermark',
@@ -115,24 +103,6 @@ export const TOOLS = [
         description: 'Make form fields uneditable.',
         href: '/pdf/flatten',
         icon: Layers,
-        iconColor: '#ef4444',
-        category: 'PDF',
-        gradient: 'from-red-500/10 to-transparent'
-    },
-    {
-        title: 'Add Text',
-        description: 'Place text anywhere on your PDF pages.',
-        href: '/pdf/add-text',
-        icon: Type,
-        iconColor: '#ef4444',
-        category: 'PDF',
-        gradient: 'from-red-500/10 to-transparent'
-    },
-    {
-        title: 'Add Image',
-        description: 'Overlay logos, stamps, or signatures.',
-        href: '/pdf/add-image',
-        icon: ImagePlus,
         iconColor: '#ef4444',
         category: 'PDF',
         gradient: 'from-red-500/10 to-transparent'

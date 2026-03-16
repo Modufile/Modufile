@@ -13,12 +13,8 @@ export function FileProcessingOverlay({
     subMessage,
 }: FileProcessingOverlayProps) {
     return (
-        <motion.div
+        <div
             className="flex flex-col items-center justify-center min-h-[280px] p-8 border-2 border-dashed rounded-xl border-zinc-700 bg-zinc-900/50"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
         >
             {/* Animated rings + Logo */}
             <div className="relative w-20 h-20 mb-6">
@@ -37,35 +33,20 @@ export function FileProcessingOverlay({
                 </div>
             </div>
 
-            <motion.p
-                className="text-sm font-medium text-zinc-300"
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-            >
+            <p className="text-sm font-medium text-zinc-300">
                 {message}
-            </motion.p>
+            </p>
 
             {subMessage && (
-                <motion.p
-                    className="text-xs text-zinc-400 mt-1"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                >
+                <p className="text-xs text-zinc-400 mt-1">
                     {subMessage}
-                </motion.p>
+                </p>
             )}
 
-            <motion.p
-                className="text-xs text-zinc-500 mt-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-            >
+            <p className="text-xs text-zinc-500 mt-4">
                 Everything stays on your device
-            </motion.p>
-        </motion.div>
+            </p>
+        </div>
     );
 }
 

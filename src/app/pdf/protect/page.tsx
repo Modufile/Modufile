@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { Dropzone, FileProcessingOverlay } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
+import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, ShieldCheck, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { FileText, X, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
 
 interface PDFFile {
@@ -35,7 +35,7 @@ export default function ProtectPdfPage() {
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const f = newFiles[0];
         if (!f || f.type !== 'application/pdf') return;
-        setIsLoading(true);
+        flushSync(() => setIsLoading(true));
         setResult(null);
         try {
             const { PDFDocument } = await import('pdf-lib');
@@ -56,36 +56,34 @@ export default function ProtectPdfPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    const handleProtect = useCallback(async () => {
-        if (!file || (!userPassword && !ownerPassword)) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!file || (!userPassword && !ownerPassword)) throw new Error('No file or password provided');
         setIsProcessing(true);
         try {
             const mupdf = await loadMuPDF();
             const buf = await file.file.arrayBuffer();
-            const doc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf').asPDF();
+            const genDoc = mupdf.Document.openDocument(new Uint8Array(buf), 'application/pdf');
+            const doc = genDoc.asPDF();
             if (!doc) throw new Error('Not a valid PDF');
 
-            const opts = ['garbage=4', 'compress', 'clean'];
+            const opts = ['garbage=deduplicate', 'compress', 'encrypt=aes-256'];
             if (userPassword) opts.push(`user-password=${userPassword}`);
             if (ownerPassword) opts.push(`owner-password=${ownerPassword}`);
 
             const outBuf = doc.saveToBuffer(opts.join(','));
-            const bytes = outBuf.asUint8Array().slice();
-            doc.destroy();
+            const bytes = new Uint8Array(outBuf.asUint8Array());
+            genDoc.destroy();
 
-            setResult(new Blob([bytes], { type: 'application/pdf' }));
-        } catch (err) {
-            console.error('Protection failed:', err);
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            setResult(blob);
+
+            const base = file.name.replace(/\.pdf$/i, '');
+            const filename = `${base}-protected.pdf`;
+            return { blob, filename };
         } finally {
             setIsProcessing(false);
         }
     }, [file, userPassword, ownerPassword]);
-
-    const handleDownload = useCallback(() => {
-        if (!result || !file) return;
-        const base = file.name.replace(/\.pdf$/i, '');
-        downloadBlob(result, `${base}-protected.pdf`);
-    }, [result, file]);
 
     const content = toolContent['pdf-protect'];
 
@@ -95,15 +93,27 @@ export default function ProtectPdfPage() {
             description="Add password protection and encryption to your PDF"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file ? handleSave : undefined}
+            saveDisabled={!file || isProcessing || (!userPassword && !ownerPassword)}
+            saveLabel="Protect PDF"
+            importedFilesPanel={
+                <ImportedFilesPanel
+                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    onRemoveFile={() => setFile(null)}
+                    onAddFiles={handleFileAdded}
+                    acceptsMultipleFiles={toolContent['pdf-protect'].acceptsMultipleFiles}
+                    acceptedFileTypes={toolContent['pdf-protect'].acceptedFileTypes}
+                />
+            }
             sidebar={
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <>
                     <h3 className="font-medium text-sm text-zinc-100 mb-3">Encryption</h3>
                     <ul className="space-y-3 text-sm text-zinc-400">
                         <li>🔒 <strong className="text-zinc-200">AES-256</strong> — strongest PDF encryption</li>
                         <li>👤 <strong className="text-zinc-200">User password</strong> — required to open</li>
                         <li>👑 <strong className="text-zinc-200">Owner password</strong> — controls permissions</li>
                     </ul>
-                </div>
+                </>
             }
             about={content?.about}
             techSetup={content?.techSetup}
@@ -174,23 +184,12 @@ export default function ProtectPdfPage() {
                                 <CheckCircle className="w-6 h-6 text-green-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-white mb-2">PDF Protected!</h3>
-                            <p className="text-sm text-zinc-400 mb-4">AES-256 encryption applied.</p>
-                            <button onClick={handleDownload}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-                                Download Protected PDF
-                            </button>
+                            <p className="text-sm text-zinc-400">AES-256 encryption applied.</p>
+                            {/* Download handled by header Save button */}
                         </motion.div>
                     )}
                 </div>
             )}
-
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleProtect}
-                actionLabel={<><ShieldCheck className="w-4 h-4" /> Protect PDF</>}
-                disabled={!userPassword && !ownerPassword}
-            />
         </ToolPageLayout>
     );
 }

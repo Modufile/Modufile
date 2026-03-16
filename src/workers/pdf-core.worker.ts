@@ -89,18 +89,18 @@ async function renderPage(mupdf: any, operationId: string, payload: any) {
     const pixmap = page.toPixmap(
         mupdf.Matrix.scale(scale, scale),
         mupdf.ColorSpace.DeviceRGB,
-        false, // no alpha
+        true, // alpha — ImageData requires RGBA
     );
 
     sendProgress(operationId, 70, 'converting');
 
     const width = pixmap.getWidth();
     const height = pixmap.getHeight();
-    const samples = pixmap.getSamples();
+    const pixels = pixmap.getPixels();
 
     // Create ImageData → ImageBitmap for zero-copy transfer
     const imageData = new ImageData(
-        new Uint8ClampedArray(samples),
+        new Uint8ClampedArray(pixels.slice()),
         width,
         height,
     );
@@ -119,24 +119,25 @@ async function renderPage(mupdf: any, operationId: string, payload: any) {
 async function encryptPdf(mupdf: any, operationId: string, payload: any) {
     sendProgress(operationId, 10, 'loading');
 
-    const doc = mupdf.Document.openDocument(
+    const genDoc = mupdf.Document.openDocument(
         new Uint8Array(payload.buffer),
         'application/pdf',
-    ).asPDF();
+    );
+    const doc = genDoc.asPDF();
 
     if (!doc) throw new Error('Not a valid PDF');
 
     sendProgress(operationId, 50, 'encrypting');
 
-    // Build encryption options string
-    const opts = ['garbage=4', 'compress'];
+    // Build encryption options string — AES-256 is the strongest available
+    const opts = ['garbage=deduplicate', 'compress', 'encrypt=aes-256'];
     if (payload.userPassword) opts.push(`user-password=${payload.userPassword}`);
     if (payload.ownerPassword) opts.push(`owner-password=${payload.ownerPassword}`);
 
     const buffer = doc.saveToBuffer(opts.join(','));
-    const result = buffer.asUint8Array().slice(); // Copy before WASM memory is freed
+    const result = new Uint8Array(buffer.asUint8Array());
 
-    doc.destroy();
+    genDoc.destroy();
     sendProgress(operationId, 100, 'complete');
 
     return { buffer: result, operationId };
@@ -152,16 +153,16 @@ async function decryptPdf(mupdf: any, operationId: string, payload: any) {
 
     sendProgress(operationId, 30, 'authenticating');
 
-    const success = doc.authenticatePassword(payload.password);
-    if (!success) throw new Error('Incorrect password');
+    const authResult = doc.authenticatePassword(payload.password);
+    if (authResult === 0) throw new Error('Incorrect password');
 
     sendProgress(operationId, 50, 'decrypting');
 
     const pdfDoc = doc.asPDF();
-    const buffer = pdfDoc.saveToBuffer('garbage=4,compress');
-    const result = buffer.asUint8Array().slice();
+    const buffer = pdfDoc.saveToBuffer('garbage=deduplicate,compress,decrypt');
+    const result = new Uint8Array(buffer.asUint8Array());
 
-    pdfDoc.destroy();
+    doc.destroy();
     sendProgress(operationId, 100, 'complete');
 
     return { buffer: result, operationId };
@@ -170,20 +171,21 @@ async function decryptPdf(mupdf: any, operationId: string, payload: any) {
 async function repairPdf(mupdf: any, operationId: string, payload: any) {
     sendProgress(operationId, 10, 'loading');
 
-    const doc = mupdf.Document.openDocument(
+    const genDoc = mupdf.Document.openDocument(
         new Uint8Array(payload.buffer),
         'application/pdf',
-    ).asPDF();
+    );
+    const doc = genDoc.asPDF();
 
     if (!doc) throw new Error('Cannot parse PDF');
 
     sendProgress(operationId, 50, 'repairing');
 
-    // Save with maximum garbage collection — this rebuilds the xref table
-    const buffer = doc.saveToBuffer('garbage=4,compress,clean');
-    const result = buffer.asUint8Array().slice();
+    // Save with full garbage collection + sanitize — rebuilds xref and cleans content streams
+    const buffer = doc.saveToBuffer('garbage=deduplicate,compress,clean,sanitize');
+    const result = new Uint8Array(buffer.asUint8Array());
 
-    doc.destroy();
+    genDoc.destroy();
     sendProgress(operationId, 100, 'complete');
 
     return { buffer: result, operationId };

@@ -8,27 +8,41 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { FileText, Send, Lock, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Send, Lock, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function ContactPage() {
     const [formData, setFormData] = useState({
+        name: '',
         email: '',
         message: '',
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
+        setError(null);
 
-        // Simulate secure submission
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        setIsSubmitting(false);
-        setIsSubmitted(true);
-        setFormData({ email: '', message: '' });
+        try {
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error((data as { error?: string }).error || 'Failed to send');
+            }
+            setIsSubmitted(true);
+            setFormData({ name: '', email: '', message: '' });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (isSubmitted) {
@@ -106,6 +120,19 @@ export default function ContactPage() {
 
                                 <div>
                                     <label className="block text-xs font-medium text-zinc-400 mb-2 ml-1">
+                                        Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                                        placeholder="Your name"
+                                        className="w-full px-4 py-3 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-100 placeholder:text-zinc-700 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-zinc-400 mb-2 ml-1">
                                         Email
                                     </label>
                                     <div className="relative group">
@@ -135,6 +162,12 @@ export default function ContactPage() {
                                         />
                                     </div>
                                 </div>
+
+                                {error && (
+                                    <p className="text-sm text-red-400 bg-red-950/30 border border-red-500/20 rounded-lg px-4 py-2.5">
+                                        {error}
+                                    </p>
+                                )}
 
                                 <button
                                     type="submit"
