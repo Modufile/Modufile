@@ -7,7 +7,7 @@ export const notices: {
 }[] = [
         {
             id: 'construction-notice-001',
-            active: true,
+            active: false,
             message: "Tool under construction. Launching March 20, 2026. Code will be open sourced under AGPL license. Current version is for testing purposes only.",
             type: 'warning',
             dismissible: true,

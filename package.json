@@ -10,7 +10,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "deploy": "next build --webpack && npx wrangler pages deploy out"
+    "deploy": "next build --webpack && wrangler pages deploy out"
   },
   "optionalDependencies": {
     "@bentopdf/gs-wasm": "^0.1.1",
@@ -50,7 +50,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^3.114.17"
   },
   "browserslist": [
     "last 2 versions",
