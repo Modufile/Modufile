@@ -105,7 +105,7 @@ export function ImportedFilesPanel({
                 </div>
             )}
 
-            {onAddFiles && (acceptsMultipleFiles || files.length === 0) && (
+            {onAddFiles && (
                 <>
                     <input
                         type="file"
@@ -124,10 +124,15 @@ export function ImportedFilesPanel({
                                 <UploadCloud className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Browse Files</span>
                             </>
-                        ) : (
+                        ) : acceptsMultipleFiles ? (
                             <>
                                 <Plus className="w-3.5 h-3.5 text-zinc-400" />
                                 <span>Add more files</span>
+                            </>
+                        ) : (
+                            <>
+                                <UploadCloud className="w-3.5 h-3.5 text-zinc-400" />
+                                <span>Replace file</span>
                             </>
                         )}
                     </button>

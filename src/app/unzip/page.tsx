@@ -9,7 +9,7 @@ import { toolContent } from '@/data/tool-faqs';
 import { formatFileSize } from '@/lib/core/format';
 import { downloadBlob } from '@/lib/core/download';
 import { extractZip, guessMimeType, type ZipEntry } from '@/lib/core/archive';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, FileArchive, RefreshCw, X } from 'lucide-react';
 
 export default function UnzipPage() {
     const [file, setFile] = useState<File | null>(null);
@@ -121,6 +121,33 @@ export default function UnzipPage() {
                 <Dropzone onFilesAdded={handleFilesAdded} acceptedTypes={['.zip', 'application/zip']} />
             ) : (
                 <div className="space-y-2">
+                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-400 mb-3">
+                        <FileArchive className="w-4 h-4 text-zinc-500 shrink-0" />
+                        <span className="text-zinc-200 font-medium truncate max-w-[260px]">{file.name}</span>
+                        <span>{formatFileSize(file.size)}</span>
+                        <div className="ml-auto flex items-center gap-1.5">
+                            <label className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 cursor-pointer transition-colors">
+                                <RefreshCw className="w-3 h-3" /> Change file
+                                <input
+                                    type="file"
+                                    accept=".zip,application/zip"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const picked = Array.from(e.target.files || []);
+                                        if (picked.length) handleFilesAdded(picked);
+                                        e.target.value = '';
+                                    }}
+                                />
+                            </label>
+                            <button
+                                onClick={removeFile}
+                                className="h-7 w-7 inline-flex items-center justify-center rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
+                                title="Remove file"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
                     {loadError && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
                             {loadError}

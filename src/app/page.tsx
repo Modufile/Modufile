@@ -38,6 +38,13 @@ const actionMap: Record<string, string> = {
   '/image/batch': 'Edit',
   '/ocr': 'Convert',
   '/mermaid-to-flowchart': 'Edit',
+  '/image/exif': 'Security',
+  '/video/convert': 'Convert',
+  '/video/trim': 'Edit',
+  '/video/extract-audio': 'Convert',
+  '/zip': 'Optimize',
+  '/unzip': 'Organize',
+  '/qr': 'Edit',
 };
 
 export default function Home() {
@@ -49,13 +56,15 @@ export default function Home() {
   const categories = ['All', 'PDF', 'Image', 'Video', 'Archive', 'OCR', 'Diagram', 'Utility'];
   const actions = ['All', 'Organize', 'Edit', 'Convert', 'Security', 'Optimize'];
 
-  // Filter tools based on Category and Action
+  // Filter tools based on Category and Action.
+  // Some tools are registered under two categories (e.g. PDF OCR in both PDF and OCR) —
+  // dedupe by href so a tool never renders twice in the grid.
   const filteredTools = TOOLS.filter(tool => {
     const matchCategory = activeCategory === 'All' || tool.category === activeCategory;
     const toolAction = actionMap[tool.href] || 'Edit';
     const matchAction = activeAction === 'All' || toolAction === activeAction;
     return matchCategory && matchAction;
-  });
+  }).filter((tool, idx, arr) => arr.findIndex(t => t.href === tool.href) === idx);
 
   // Get tools with importance: 1 for Hero Section
   const heroTools = TOOLS.filter(tool => {

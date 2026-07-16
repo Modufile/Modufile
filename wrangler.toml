@@ -1,0 +1,7 @@
+name = "modufile"
+pages_build_output_dir = "out"
+compatibility_date = "2026-07-16"
+
+# Note: Pages config does not support account_id in this file.
+# For non-interactive deploys set CLOUDFLARE_ACCOUNT_ID=add181e368a1a8f0cd5509a57b9c3dc3
+# (the login sees multiple Cloudflare accounts; modufile lives on this one).

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dropzone } from '@/components/ui';
+import { Dropzone, LogoSpinner } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
@@ -9,7 +9,7 @@ import { toolContent } from '@/data/tool-faqs';
 import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { formatFileSize } from '@/lib/core/format';
 import { stripImageMetadata, supportsLosslessStrip } from '@/lib/core/exif';
-import { MapPin, ShieldCheck } from 'lucide-react';
+import { MapPin, ShieldCheck, RefreshCw, X } from 'lucide-react';
 
 interface MetadataRow {
     key: string;
@@ -171,11 +171,39 @@ export default function ExifPage() {
                                 className="w-40 h-40 object-cover rounded-xl border border-zinc-800 shrink-0"
                             />
                         )}
-                        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex-1 min-w-0 text-sm text-zinc-400 space-y-1">
+                        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex-1 min-w-0 text-sm text-zinc-400 space-y-2">
                             <p className="text-zinc-200 font-medium truncate">{file.name}</p>
                             <p>{formatFileSize(file.size)} · {file.type || 'unknown type'}</p>
+                            <div className="flex items-center gap-1.5 pt-1">
+                                <label className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 cursor-pointer transition-colors">
+                                    <RefreshCw className="w-3 h-3" /> Change file
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const picked = Array.from(e.target.files || []);
+                                            if (picked.length) handleFilesAdded(picked);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                <button
+                                    onClick={removeFile}
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
+                                    title="Remove file"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
                         </div>
                     </div>
+
+                    {!scanned && (
+                        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+                            <LogoSpinner size={22} label="Reading metadata…" />
+                        </div>
+                    )}
 
                     {scanned && rows.length === 0 && (
                         <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2.5">

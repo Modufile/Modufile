@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dropzone } from '@/components/ui';
+import { Dropzone, LogoSpinner } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
 import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { formatFileSize } from '@/lib/core/format';
+import { RefreshCw, X } from 'lucide-react';
 import {
     convertVideo,
     getVideoInfo,
@@ -166,7 +167,7 @@ export default function VideoConvertPage() {
                         />
                     )}
 
-                    <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-zinc-400">
+                    <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-400">
                         <span className="text-zinc-200 font-medium truncate max-w-[260px]">{file.name}</span>
                         <span>{formatFileSize(file.size)}</span>
                         {info && (
@@ -176,6 +177,29 @@ export default function VideoConvertPage() {
                                 {!info.hasAudio && <span className="text-yellow-500">no audio track</span>}
                             </>
                         )}
+                        {!info && !loadError && <LogoSpinner size={20} label="Reading video…" />}
+                        <div className="ml-auto flex items-center gap-1.5">
+                            <label className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 cursor-pointer transition-colors">
+                                <RefreshCw className="w-3 h-3" /> Change file
+                                <input
+                                    type="file"
+                                    accept="video/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const picked = Array.from(e.target.files || []);
+                                        if (picked.length) handleFilesAdded(picked);
+                                        e.target.value = '';
+                                    }}
+                                />
+                            </label>
+                            <button
+                                onClick={removeFile}
+                                className="h-7 w-7 inline-flex items-center justify-center rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-red-400 transition-colors"
+                                title="Remove file"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                     </div>
 
                     {loadError && (
@@ -186,8 +210,8 @@ export default function VideoConvertPage() {
 
                     {isProcessing && (
                         <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
-                            <div className="flex justify-between text-xs text-zinc-400">
-                                <span>Converting…</span>
+                            <div className="flex items-center justify-between text-xs text-zinc-400">
+                                <LogoSpinner size={18} label="Converting…" />
                                 <span>{progress}%</span>
                             </div>
                             <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">

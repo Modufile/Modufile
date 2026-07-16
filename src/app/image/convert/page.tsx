@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dropzone } from '@/components/ui';
+import { Dropzone, EngineLoadingNotice } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
@@ -145,9 +145,7 @@ export default function ImageConvertPage() {
                     </div>
 
                     {!isMagickReady && (
-                        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs text-yellow-400">
-                            Initializing Image Engine...
-                        </div>
+                        <EngineLoadingNotice label="Loading image engine…" />
                     )}
                 </div>
             }
