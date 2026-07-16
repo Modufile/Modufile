@@ -1,10 +1,10 @@
 'use client';
 
-import { TOOLS } from '@/config/tools';
+import { RANKED_TOOLS } from '@/config/tools';
 import { ToolCard } from '@/components/ui';
 
 export default function PDFToolsPage() {
-    const pdfTools = TOOLS.filter(t => t.category === 'PDF');
+    const pdfTools = RANKED_TOOLS.filter(t => t.category === 'PDF');
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] p-6 pt-12 md:pt-20">

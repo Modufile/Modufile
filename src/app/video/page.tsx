@@ -1,10 +1,10 @@
 'use client';
 
-import { TOOLS } from '@/config/tools';
+import { RANKED_TOOLS } from '@/config/tools';
 import { ToolCard } from '@/components/ui';
 
 export default function VideoToolsPage() {
-    const videoTools = TOOLS.filter(t => t.category === 'Video');
+    const videoTools = RANKED_TOOLS.filter(t => t.category === 'Video');
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] p-6 pt-12 md:pt-20">

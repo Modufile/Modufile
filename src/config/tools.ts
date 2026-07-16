@@ -376,3 +376,52 @@ export const TOOLS = [
     },
 ];
 
+/**
+ * Usage-probability rank (1 = most searched/used globally).
+ * Drives display order on the homepage grid and hub pages so users
+ * find the tools they most likely need first. Unranked tools sort last.
+ * Note: Office to PDF ranks low deliberately — it is still a stub.
+ */
+const POPULARITY: Record<string, number> = {
+    '/pdf/merge': 1,
+    '/pdf/compress': 2,
+    '/pdf/pdf-to-word': 3,
+    '/image/convert': 4,
+    '/image/compress': 5,
+    '/pdf/editor': 6,
+    '/pdf/split': 7,
+    '/ocr': 8,
+    '/pdf/unlock': 9,
+    '/video/convert': 10,
+    '/pdf/rotate': 11,
+    '/image/resize': 12,
+    '/video/extract-audio': 13,
+    '/qr': 14,
+    '/video/trim': 15,
+    '/pdf/remove-pages': 16,
+    '/pdf/protect': 17,
+    '/pdf/ocr': 18,
+    '/unzip': 19,
+    '/zip': 20,
+    '/pdf/watermark': 21,
+    '/image/exif': 22,
+    '/pdf/organize': 23,
+    '/pdf/page-numbers': 24,
+    '/mermaid-to-flowchart': 25,
+    '/pdf/repair': 26,
+    '/pdf/redact': 27,
+    '/pdf/pdf-to-excel': 28,
+    '/pdf/metadata': 29,
+    '/pdf/flatten': 30,
+    '/pdf/resize-pages': 31,
+    '/pdf/scan': 32,
+    '/image/batch': 33,
+    '/pdf/office-to-pdf': 34,
+    '/pdf/pdfa': 35,
+};
+
+/** TOOLS sorted by usage probability — use this for any user-facing tool listing. */
+export const RANKED_TOOLS = [...TOOLS].sort(
+    (a, b) => (POPULARITY[a.href] ?? 99) - (POPULARITY[b.href] ?? 99),
+);
+

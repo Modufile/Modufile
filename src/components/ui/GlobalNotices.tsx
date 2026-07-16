@@ -6,7 +6,7 @@ import { X, AlertTriangle, Info, CheckCircle, AlertOctagon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
 
 export function GlobalNotices() {
-    const [visibleNotices, setVisibleNotices] = useState(notices.filter(n => n.active));
+    const [visibleNotices] = useState(notices.filter(n => n.active));
     const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
     useEffect(() => {

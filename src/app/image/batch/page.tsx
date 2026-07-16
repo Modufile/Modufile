@@ -6,12 +6,11 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { Image as ImageIcon, X, Plus, Trash2, ArrowRight } from 'lucide-react';
+import { Image as ImageIcon, X, Plus, Trash2 } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadMultipleAsZip } from '@/lib/core/download';
+import { buildZipBlob } from '@/lib/core/download';
 import { initMagick } from '@/lib/core/magick';
-import { ImageMagick, MagickFormat, MagickGeometry, Gravity } from '@imagemagick/magick-wasm';
+import { ImageMagick, MagickGeometry } from '@imagemagick/magick-wasm';
 
 interface ImageFile {
     id: string;
@@ -26,7 +25,7 @@ type OperationType = 'resize' | 'grayscale' | 'blur' | 'rotate' | 'flip';
 interface Operation {
     id: string;
     type: OperationType;
-    params: any;
+    params: Record<string, number>;
 }
 
 export default function ImageBatchPage() {
@@ -81,7 +80,7 @@ export default function ImageBatchPage() {
         setOperations(prev => [...prev, newOp]);
     };
 
-    const updateOperation = (id: string, params: any) => {
+    const updateOperation = (id: string, params: Record<string, number>) => {
         setOperations(prev => prev.map(op => op.id === id ? { ...op, params: { ...op.params, ...params } } : op));
     };
 
@@ -89,8 +88,8 @@ export default function ImageBatchPage() {
         setOperations(prev => prev.filter(op => op.id !== id));
     };
 
-    const handleProcess = async () => {
-        if (!isMagickReady || files.length === 0) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!isMagickReady || files.length === 0) throw new Error('Not ready');
         setIsProcessing(true);
 
         try {
@@ -121,21 +120,19 @@ export default function ImageBatchPage() {
                     }
 
                     image.write(image.format, (data) => {
-                        let ext = img.name.split('.').pop() || 'jpg';
                         // Keep simple: retain extension unless format explicitly changed (not supported in this simple UI yet)
-
-                        const blob = new Blob([data as any], { type: img.file.type });
+                        const ext = img.name.split('.').pop() || 'jpg';
+                        const blob = new Blob([new Uint8Array(data)], { type: img.file.type });
                         const newName = `${img.name.substring(0, img.name.lastIndexOf('.'))}_processed.${ext}`;
                         outputFiles.push({ name: newName, blob });
                     });
                 });
             }
 
-            await downloadMultipleAsZip(outputFiles, `batch_processed`);
-
-        } catch (error) {
-            console.error('Batch failed:', error);
-            alert('Batch processing failed.');
+            if (outputFiles.length === 1) {
+                return { blob: outputFiles[0].blob, filename: outputFiles[0].name };
+            }
+            return { blob: await buildZipBlob(outputFiles), filename: 'batch_processed.zip' };
         } finally {
             setIsProcessing(false);
         }
@@ -150,9 +147,13 @@ export default function ImageBatchPage() {
             about={toolContent['image-batch'].about}
             techSetup={toolContent['image-batch'].techSetup}
             faqs={toolContent['image-batch'].faqs}
+            onSave={files.length > 0 && operations.length > 0 ? handleSave : undefined}
+            saveDisabled={!isMagickReady || files.length === 0 || operations.length === 0 || isProcessing}
+            saveLabel={`Run ${operations.length} Operation${operations.length === 1 ? '' : 's'}`}
+            isProcessing={isProcessing}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    files={files.map(f => ({ name: f.name, size: f.size }))}
                     onRemoveFile={(idx) => removeFile(files[idx].id)}
                     onAddFiles={handleFilesAdded}
                     acceptsMultipleFiles={toolContent['image-batch'].acceptsMultipleFiles}
@@ -296,18 +297,6 @@ export default function ImageBatchPage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={files.length > 0 && operations.length > 0}
-                isProcessing={isProcessing}
-                onAction={handleProcess}
-                disabled={!isMagickReady}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <ArrowRight className="w-4 h-4" />
-                        Run {operations.length} Operations
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

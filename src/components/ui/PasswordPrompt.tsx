@@ -44,12 +44,16 @@ export function PasswordPrompt({
     const [showPassword, setShowPassword] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Focus input when modal opens
+    // Reset fields and focus input when modal opens (deferred so the
+    // state updates don't run synchronously inside the effect)
     useEffect(() => {
         if (isOpen) {
-            setTimeout(() => inputRef.current?.focus(), 100);
-            setPassword('');
-            setConfirmPassword('');
+            const timer = setTimeout(() => {
+                setPassword('');
+                setConfirmPassword('');
+                inputRef.current?.focus();
+            }, 100);
+            return () => clearTimeout(timer);
         }
     }, [isOpen]);
 

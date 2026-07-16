@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Github } from 'lucide-react';
 import { Logo } from '@/components/ui';
 
 export function Header() {
     const pathname = usePathname();
-    const isToolPage = pathname?.match(/^\/(pdf|image|ocr)\/.+/);
+    const isToolPage =
+        pathname?.match(/^\/(pdf|image|ocr|video)\/.+/) ||
+        pathname?.match(/^\/(ocr|zip|unzip|qr|mermaid-to-flowchart)\/?$/);
 
     if (isToolPage) return null;
 
@@ -21,10 +22,11 @@ export function Header() {
                     <span className="font-semibold text-zinc-100 text-lg tracking-tight">Modufile</span>
                 </Link>
 
-                <nav className="flex items-center gap-6 text-sm font-medium text-zinc-400">
-                    <Link prefetch={false} href="/pdf" className="hover:text-zinc-100 transition-colors">PDF Tools</Link>
-                    <Link prefetch={false} href="/image" className="hover:text-zinc-100 transition-colors">Image Tools</Link>
-                    <Link prefetch={false} href="/ocr" className="hover:text-zinc-100 transition-colors">OCR</Link>
+                <nav className="flex items-center gap-4 sm:gap-6 text-sm font-medium text-zinc-400 overflow-x-auto no-scrollbar">
+                    <Link prefetch={false} href="/pdf" className="hover:text-zinc-100 transition-colors whitespace-nowrap">PDF Tools</Link>
+                    <Link prefetch={false} href="/image" className="hover:text-zinc-100 transition-colors whitespace-nowrap">Image Tools</Link>
+                    <Link prefetch={false} href="/video" className="hover:text-zinc-100 transition-colors whitespace-nowrap">Video Tools</Link>
+                    <Link prefetch={false} href="/ocr" className="hover:text-zinc-100 transition-colors whitespace-nowrap">OCR</Link>
                 </nav>
             </div>
         </header>

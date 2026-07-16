@@ -6,10 +6,9 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { Image as ImageIcon, X, RefreshCw } from 'lucide-react';
+import { Image as ImageIcon, X } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadBlob } from '@/lib/core/download';
+import { buildZipBlob } from '@/lib/core/download';
 import { initMagick } from '@/lib/core/magick';
 import { ImageMagick, MagickFormat } from '@imagemagick/magick-wasm';
 
@@ -70,33 +69,32 @@ export default function ImageConvertPage() {
         });
     }, []);
 
-    const handleConvert = async () => {
-        if (!isMagickReady || files.length === 0) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!isMagickReady || files.length === 0) throw new Error('Not ready');
         setIsProcessing(true);
 
         try {
+            const outputFiles: { name: string, blob: Blob }[] = [];
+
             for (const img of files) {
                 const arrayBuffer = await img.file.arrayBuffer();
                 const bytes = new Uint8Array(arrayBuffer);
 
-                // Use ImageMagick to convert
                 ImageMagick.read(bytes, (image) => {
                     image.write(targetFormat.value, (data) => {
-                        const blob = new Blob([data as any], { type: `image/${targetFormat.ext}` });
+                        const blob = new Blob([new Uint8Array(data)], { type: `image/${targetFormat.ext}` });
                         const newName = `${img.name.substring(0, img.name.lastIndexOf('.'))}.${targetFormat.ext}`;
-                        downloadBlob(blob, newName);
+                        outputFiles.push({ name: newName, blob });
                     });
                 });
             }
 
-            // Update status (mock)
-
-            // Update status (mock)
             setFiles(prev => prev.map(f => ({ ...f, status: 'converted' })));
 
-        } catch (error) {
-            console.error('Conversion failed:', error);
-            alert('Conversion failed. Please check the console for details.');
+            if (outputFiles.length === 1) {
+                return { blob: outputFiles[0].blob, filename: outputFiles[0].name };
+            }
+            return { blob: await buildZipBlob(outputFiles), filename: `converted_to_${targetFormat.ext}.zip` };
         } finally {
             setIsProcessing(false);
         }
@@ -111,9 +109,13 @@ export default function ImageConvertPage() {
             about={toolContent['image-convert'].about}
             techSetup={toolContent['image-convert'].techSetup}
             faqs={toolContent['image-convert'].faqs}
+            onSave={files.length > 0 ? handleSave : undefined}
+            saveDisabled={!isMagickReady || files.length === 0 || isProcessing}
+            saveLabel="Convert & Save"
+            isProcessing={isProcessing}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    files={files.map(f => ({ name: f.name, size: f.size }))}
                     onRemoveFile={(idx) => removeFile(files[idx].id)}
                     onAddFiles={handleFilesAdded}
                     acceptsMultipleFiles={toolContent['image-convert'].acceptsMultipleFiles}
@@ -200,18 +202,6 @@ export default function ImageConvertPage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={files.length > 0}
-                isProcessing={isProcessing}
-                onAction={handleConvert}
-                disabled={!isMagickReady}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <RefreshCw className="w-4 h-4" />
-                        Convert {files.length} Images to {targetFormat.label}
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

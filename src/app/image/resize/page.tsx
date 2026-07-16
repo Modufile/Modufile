@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Dropzone } from '@/components/ui';
+import { Dropzone, EngineLoadingNotice } from '@/components/ui';
 import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { Image as ImageIcon, X, Scaling } from 'lucide-react';
+import { Image as ImageIcon, X } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadMultipleAsZip } from '@/lib/core/download';
+import { buildZipBlob } from '@/lib/core/download';
 import { initMagick } from '@/lib/core/magick';
 import { ImageMagick, MagickGeometry, MagickFormat, Gravity } from '@imagemagick/magick-wasm';
 
@@ -101,8 +100,8 @@ export default function ImageResizePage() {
         });
     }, []);
 
-    const handleProcess = async () => {
-        if (!isMagickReady || files.length === 0) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!isMagickReady || files.length === 0) throw new Error('Not ready');
         setIsProcessing(true);
 
         try {
@@ -137,7 +136,7 @@ export default function ImageResizePage() {
                         if (image.format === MagickFormat.Jpeg) ext = 'jpg';
                         if (image.format === MagickFormat.WebP) ext = 'webp';
 
-                        const blob = new Blob([data as any], { type: img.file.type });
+                        const blob = new Blob([new Uint8Array(data)], { type: img.file.type });
                         const suffix = mode === 'resize' ? `resized_${width}x${height || 'auto'}` : 'cropped';
                         const newName = `${img.name.substring(0, img.name.lastIndexOf('.'))}_${suffix}.${ext}`;
                         outputFiles.push({ name: newName, blob });
@@ -145,11 +144,10 @@ export default function ImageResizePage() {
                 });
             }
 
-            await downloadMultipleAsZip(outputFiles, `${mode}_images`);
-
-        } catch (error) {
-            console.error('Processing failed:', error);
-            alert('Processing failed. Check console.');
+            if (outputFiles.length === 1) {
+                return { blob: outputFiles[0].blob, filename: outputFiles[0].name };
+            }
+            return { blob: await buildZipBlob(outputFiles), filename: `${mode}_images.zip` };
         } finally {
             setIsProcessing(false);
         }
@@ -164,9 +162,13 @@ export default function ImageResizePage() {
             about={toolContent['image-resize'].about}
             techSetup={toolContent['image-resize'].techSetup}
             faqs={toolContent['image-resize'].faqs}
+            onSave={files.length > 0 ? handleSave : undefined}
+            saveDisabled={!isMagickReady || files.length === 0 || isProcessing}
+            saveLabel={mode === 'resize' ? 'Resize & Save' : 'Crop & Save'}
+            isProcessing={isProcessing}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    files={files.map(f => ({ name: f.name, size: f.size }))}
                     onRemoveFile={(idx) => removeFile(files[idx].id)}
                     onAddFiles={handleFilesAdded}
                     acceptsMultipleFiles={toolContent['image-resize'].acceptsMultipleFiles}
@@ -261,9 +263,7 @@ export default function ImageResizePage() {
                     )}
 
                     {!isMagickReady && (
-                        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs text-yellow-500">
-                            Loading Graphics Engine...
-                        </div>
+                        <EngineLoadingNotice label="Loading image engine…" />
                     )}
                 </div>
             }
@@ -315,18 +315,6 @@ export default function ImageResizePage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={files.length > 0}
-                isProcessing={isProcessing}
-                onAction={handleProcess}
-                disabled={!isMagickReady}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <Scaling className="w-4 h-4" />
-                        {mode === 'resize' ? 'Resize Images' : 'Crop Images'}
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

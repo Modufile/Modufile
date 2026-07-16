@@ -6,10 +6,9 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { ImageDown, X, Zap } from 'lucide-react';
+import { ImageDown, X } from 'lucide-react';
 import { formatFileSize } from '@/lib/core/format';
-import { downloadMultipleAsZip } from '@/lib/core/download';
+import { buildZipBlob } from '@/lib/core/download';
 import { initMagick } from '@/lib/core/magick';
 import { ImageMagick, MagickFormat, MagickGeometry } from '@imagemagick/magick-wasm';
 
@@ -65,8 +64,8 @@ export default function ImageCompressPage() {
         });
     }, []);
 
-    const handleCompress = async () => {
-        if (!isMagickReady || files.length === 0) return;
+    const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
+        if (!isMagickReady || files.length === 0) throw new Error('Not ready');
         setIsProcessing(true);
 
         try {
@@ -91,7 +90,7 @@ export default function ImageCompressPage() {
                     image.quality = quality;
 
                     // Determine Output Format
-                    let format = targetFormat === 'original' ? image.format : targetFormat;
+                    const format = targetFormat === 'original' ? image.format : targetFormat;
 
                     // Magick WASM write
                     image.write(format, (data) => {
@@ -108,7 +107,7 @@ export default function ImageCompressPage() {
                             ext = originalExt;
                         }
 
-                        const blob = new Blob([data as any], { type: `image/${ext}` });
+                        const blob = new Blob([new Uint8Array(data)], { type: `image/${ext}` });
                         const newName = `${img.name.substring(0, img.name.lastIndexOf('.'))}_compressed.${ext}`;
 
                         outputFiles.push({ name: newName, blob });
@@ -124,11 +123,11 @@ export default function ImageCompressPage() {
             }
 
             setFiles(updatedFiles);
-            await downloadMultipleAsZip(outputFiles, `compressed_images`);
 
-        } catch (error) {
-            console.error('Compression failed:', error);
-            alert('Compression failed. Please check console.');
+            if (outputFiles.length === 1) {
+                return { blob: outputFiles[0].blob, filename: outputFiles[0].name };
+            }
+            return { blob: await buildZipBlob(outputFiles), filename: 'compressed_images.zip' };
         } finally {
             setIsProcessing(false);
         }
@@ -143,9 +142,13 @@ export default function ImageCompressPage() {
             about={toolContent['image-compress'].about}
             techSetup={toolContent['image-compress'].techSetup}
             faqs={toolContent['image-compress'].faqs}
+            onSave={files.length > 0 ? handleSave : undefined}
+            saveDisabled={!isMagickReady || files.length === 0 || isProcessing}
+            saveLabel="Compress & Save"
+            isProcessing={isProcessing}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: (f as any).pageCount }))}
+                    files={files.map(f => ({ name: f.name, size: f.size }))}
                     onRemoveFile={(idx) => removeFile(files[idx].id)}
                     onAddFiles={handleFilesAdded}
                     acceptsMultipleFiles={toolContent['image-compress'].acceptsMultipleFiles}
@@ -181,7 +184,7 @@ export default function ImageCompressPage() {
                         <select
                             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm text-zinc-100 focus:outline-none focus:border-[#3A76F0]"
                             value={targetFormat}
-                            onChange={(e) => setTargetFormat(e.target.value as any)}
+                            onChange={(e) => setTargetFormat(e.target.value as MagickFormat | 'original')}
                         >
                             <option value="original">Keep Original</option>
                             <option value={MagickFormat.Jpeg}>JPG (Best Compatibility)</option>
@@ -268,18 +271,6 @@ export default function ImageCompressPage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={files.length > 0}
-                isProcessing={isProcessing}
-                onAction={handleCompress}
-                disabled={!isMagickReady}
-                actionLabel={
-                    <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4" />
-                        Compress {files.length} Images
-                    </div>
-                }
-            />
         </ToolPageLayout>
     );
 }

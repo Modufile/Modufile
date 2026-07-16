@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TOOLS } from '@/config/tools';
+import { RANKED_TOOLS } from '@/config/tools';
 import { TransparencySection } from '@/components/landing/TransparencySection';
 import { FaqGrid } from '@/components/landing/FaqGrid';
 import { ToolCard } from '@/components/ui';
@@ -59,7 +59,7 @@ export default function Home() {
   // Filter tools based on Category and Action.
   // Some tools are registered under two categories (e.g. PDF OCR in both PDF and OCR) —
   // dedupe by href so a tool never renders twice in the grid.
-  const filteredTools = TOOLS.filter(tool => {
+  const filteredTools = RANKED_TOOLS.filter(tool => {
     const matchCategory = activeCategory === 'All' || tool.category === activeCategory;
     const toolAction = actionMap[tool.href] || 'Edit';
     const matchAction = activeAction === 'All' || toolAction === activeAction;
@@ -67,7 +67,7 @@ export default function Home() {
   }).filter((tool, idx, arr) => arr.findIndex(t => t.href === tool.href) === idx);
 
   // Get tools with importance: 1 for Hero Section
-  const heroTools = TOOLS.filter(tool => {
+  const heroTools = RANKED_TOOLS.filter(tool => {
     const key = tool.href.replace(/^\//, '').replace(/\//g, '-');
     return tool.category === 'PDF' && toolContent[key]?.importance === 1;
   });
