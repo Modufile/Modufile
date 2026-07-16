@@ -1,8 +1,8 @@
 'use client';
 
 import {
-    Info, Cpu, Settings, FileText, Image as ImageIcon,
-    FileCode2, Download, Loader2, Pencil, ChevronDown,
+    Info, Cpu, Settings, FileText,
+    Download, Loader2, Pencil, ChevronDown,
     SlidersHorizontal, X
 } from 'lucide-react';
 import { FaqSection } from '@/components/ui/FaqSection';
@@ -33,6 +33,7 @@ interface ToolPageLayoutProps {
     /** ImportedFilesPanel — rendered just above AppliedChangesPanel at the bottom of the sidebar. */
     importedFilesPanel?: ReactNode;
     leftSidebarActions?: ReactNode;
+    leftSidebarClassName?: string;
     about?: string;
     techSetup?: TechSetup[];
     faqs?: FAQ[];
@@ -47,17 +48,17 @@ interface ToolPageLayoutProps {
     onExportAs?: (format: string) => Promise<void>;
     appliedChanges?: AppliedChange[];
     onResetChanges?: () => void;
+    workspaceClassName?: string;
 }
 
 export function ToolPageLayout({
     title,
     description,
-    parentCategory,
-    parentHref,
     children,
     sidebar,
     importedFilesPanel,
     leftSidebarActions,
+    leftSidebarClassName,
     about,
     techSetup,
     faqs,
@@ -72,6 +73,7 @@ export function ToolPageLayout({
     onExportAs,
     appliedChanges,
     onResetChanges,
+    workspaceClassName,
 }: ToolPageLayoutProps) {
     const [savePending, setSavePending] = useState(false);
     const [toast, setToast] = useState<{ filename: string; blobUrl: string } | null>(null);
@@ -206,6 +208,7 @@ export function ToolPageLayout({
                     <nav className="hidden lg:flex items-center gap-4">
                         <Link prefetch={false} href="/pdf" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">PDF</Link>
                         <Link prefetch={false} href="/image" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">Image</Link>
+                        <Link prefetch={false} href="/video" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">Video</Link>
                         <Link prefetch={false} href="/ocr" className="text-[13px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors">OCR</Link>
                     </nav>
 
@@ -270,13 +273,13 @@ export function ToolPageLayout({
 
             <div className="flex-1 flex overflow-hidden">
                 {leftSidebarActions && (
-                    <aside className="w-16 border-r border-zinc-800/60 bg-[#111112] shrink-0 flex flex-col items-center py-4 gap-2 overflow-y-auto">
+                    <aside className={`${leftSidebarClassName ?? 'w-16'} border-r border-zinc-800/60 bg-[#111112] shrink-0 flex flex-col items-center py-4 gap-2 overflow-y-auto`}>
                         {leftSidebarActions}
                     </aside>
                 )}
 
                 <main className="flex-1 min-w-0 bg-[#09090B] overflow-y-auto relative p-4 md:p-6 lg:p-10 flex flex-col">
-                    <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
+                    <div className={`${workspaceClassName ?? 'max-w-4xl'} mx-auto w-full flex-1 flex flex-col`}>
                         <div className="flex-1 flex flex-col">
                             {children}
                         </div>

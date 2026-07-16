@@ -493,6 +493,21 @@ async function opApplyRedactions(params: { pageIndex: number }) {
 async function opSave() {
     if (!pdfDoc) throw new Error('No document loaded');
 
+    // Apply redactions on every page before saving so that redact annotations
+    // placed on pages other than the currently viewed page are not missed.
+    const pageCount = doc.countPages();
+    for (let i = 0; i < pageCount; i++) {
+        const page = pdfDoc.loadPage(i);
+        const annots = page.getAnnotations();
+        const hasRedact = annots.some((a: any) => {
+            try { return a.getType() === 'Redact'; } catch { return false; }
+        });
+        if (hasRedact) {
+            page.applyRedactions(true, 2, 1, 0); // blackBoxes, REDACT_IMAGE_REMOVE, LINE_ART_REMOVE_IF_COVERED, TEXT_NONE
+        }
+    }
+
+    // After applying redactions the document can no longer be saved incrementally
     const canIncremental = pdfDoc.canBeSavedIncrementally();
     const options = canIncremental ? 'incremental' : 'compress,garbage=compact';
     const buffer = pdfDoc.saveToBuffer(options);

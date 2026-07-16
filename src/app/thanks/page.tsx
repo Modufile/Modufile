@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Heart, AlertTriangle, ExternalLink } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 interface LibraryEntry {
@@ -155,6 +155,22 @@ const LIBRARY_GROUPS: { heading: string; libraries: LibraryEntry[] }[] = [
                 licenseUrl: 'https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/LICENSE',
                 author: 'Jerome Wu',
             },
+            {
+                name: 'Mediabunny',
+                description: 'Pure TypeScript media toolkit — powers video conversion, trimming, and audio extraction via the WebCodecs API.',
+                url: 'https://mediabunny.dev',
+                license: 'MPL-2.0',
+                licenseUrl: 'https://github.com/Vanilagy/mediabunny/blob/main/LICENSE',
+                author: 'Vanilagy',
+            },
+            {
+                name: 'exifr',
+                description: 'Fast EXIF/GPS/XMP metadata parser — powers the EXIF viewer.',
+                url: 'https://github.com/MikeKovarik/exifr',
+                license: 'MIT',
+                licenseUrl: 'https://github.com/MikeKovarik/exifr/blob/master/LICENSE',
+                author: 'Mike Kovařík',
+            },
         ],
     },
     {
@@ -248,12 +264,28 @@ const LIBRARY_GROUPS: { heading: string; libraries: LibraryEntry[] }[] = [
         heading: 'Utilities',
         libraries: [
             {
+                name: 'Mermaid',
+                description: 'Diagram and flowchart syntax parser — powers the Mermaid-to-flowchart editor.',
+                url: 'https://mermaid.js.org',
+                license: 'MIT',
+                licenseUrl: 'https://github.com/mermaid-js/mermaid/blob/develop/LICENSE',
+                author: 'Mermaid contributors',
+            },
+            {
                 name: 'fflate',
-                description: 'High-performance (de)compression in pure JavaScript — used for ZIP and GZIP operations.',
+                description: 'High-performance (de)compression in pure JavaScript — powers the Create ZIP and Extract ZIP tools.',
                 url: 'https://github.com/101arrowz/fflate',
                 license: 'MIT',
                 licenseUrl: 'https://github.com/101arrowz/fflate/blob/master/LICENSE',
                 author: 'Arjun Barrett',
+            },
+            {
+                name: 'node-qrcode',
+                description: 'QR code encoder — powers the QR Code Generator (PNG and SVG output).',
+                url: 'https://github.com/soldair/node-qrcode',
+                license: 'MIT',
+                licenseUrl: 'https://github.com/soldair/node-qrcode/blob/master/license',
+                author: 'Ryan Day',
             },
         ],
     },
@@ -335,6 +367,17 @@ export default function ThanksPage() {
                     <p className="text-lg text-zinc-400 max-w-2xl leading-relaxed">
                         Modufile is built entirely on open-source software. We are grateful to every maintainer and contributor whose work makes this possible.
                     </p>
+                    <p className="text-sm text-zinc-500 max-w-2xl leading-relaxed mt-4">
+                        Modufile&apos;s own code is licensed under the{' '}
+                        <a href="https://github.com/Modufile/Modufile/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white underline underline-offset-2 transition-colors">
+                            MIT License
+                        </a>{' '}
+                        and the complete source is available on{' '}
+                        <a href="https://github.com/Modufile/Modufile" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white underline underline-offset-2 transition-colors">
+                            GitHub
+                        </a>{' '}
+                        — audit exactly what happens to your files. Third-party components below remain under their own licenses.
+                    </p>
                 </div>
 
                 {/* AGPL Notice */}
@@ -359,8 +402,11 @@ export default function ThanksPage() {
                                     <span className="text-zinc-400">
                                         <strong className="text-zinc-300">Open source use:</strong> Fully permitted.
                                         The AGPL requires that source code of any application using these components
-                                        (including over a network) be publicly available.
-                                        This repository satisfies that requirement.
+                                        (including over a network) be publicly available. Modufile&apos;s complete
+                                        corresponding source is published at{' '}
+                                        <a href="https://github.com/Modufile/Modufile" target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:text-white underline underline-offset-2">
+                                            github.com/Modufile/Modufile
+                                        </a>, which satisfies that requirement.
                                     </span>
                                 </div>
                                 <div className="flex items-start gap-2.5 text-sm">

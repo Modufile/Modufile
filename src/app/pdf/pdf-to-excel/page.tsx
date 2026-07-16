@@ -6,7 +6,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { Table, X, FileOutput, AlertTriangle, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -29,6 +29,8 @@ export default function PDFToExcelPage() {
     const [stage, setStage] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [tableCount, setTableCount] = useState(0);
+    const inputName = file ? file.name.replace(/\.pdf$/i, '.xlsx') : 'tables.xlsx';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -118,13 +120,15 @@ export default function PDFToExcelPage() {
             setTableCount(allTables.length);
             setResult(blob);
             setStage('');
-        } catch (err: any) {
+            return { blob, filename: sanitized };
+        } catch (err: unknown) {
             console.error('PDF to Excel conversion failed:', err);
-            setError(err.message || 'Conversion failed');
+            setError(err instanceof Error ? err.message : 'Conversion failed');
+            throw err;
         } finally {
             setIsProcessing(false);
         }
-    }, [file]);
+    }, [file, sanitized]);
 
     const handleDownload = useCallback(() => {
         if (!result || !file) return;
@@ -140,9 +144,14 @@ export default function PDFToExcelPage() {
             description="Extract tabular data from your PDF into spreadsheets"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={file && !isProcessing ? handleConvert : undefined}
+            saveDisabled={!file || isProcessing}
+            saveLabel="Extract Tables"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
+                    files={file ? [{ name: file.name, size: file.size, pageCount: file.pageCount }] : []}
                     onRemoveFile={() => setFile(null)}
                     onAddFiles={handleFileAdded}
                     acceptsMultipleFiles={toolContent['pdf-to-excel'].acceptsMultipleFiles}
@@ -232,12 +241,6 @@ export default function PDFToExcelPage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={!!file && !result && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleConvert}
-                actionLabel={<><Table className="w-4 h-4" /> Extract Tables</>}
-            />
         </ToolPageLayout>
     );
 }

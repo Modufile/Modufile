@@ -10,14 +10,27 @@ import { toolContent } from '@/data/tool-faqs';
 import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { PDFJS_WORKER_SRC } from '@/lib/pdfjs-config';
 import {
-    FileText, X, GripVertical
+    FileText, Image as ImageIcon, X, GripVertical
 } from 'lucide-react';
 import { motion, Reorder } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { PDFDocument } from 'pdf-lib';
 import Link from 'next/link';
 
-interface PDFFile {
+const ACCEPTED_TYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/avif',
+    'image/heic',
+    'image/heif',
+    'image/tiff',
+    'image/bmp',
+    'image/gif',
+];
+
+interface MergeFile {
     id: string;
     file: File;
     name: string;
@@ -25,6 +38,7 @@ interface PDFFile {
     pageCount: number;
     firstThumb: string | null;
     lastThumb: string | null;
+    isImage: boolean;
 }
 
 async function renderPageThumbnail(file: File, pageIndex: number, width = 120): Promise<string | null> {
@@ -53,8 +67,68 @@ async function renderPageThumbnail(file: File, pageIndex: number, width = 120): 
     }
 }
 
+function renderImageThumbnail(file: File, width = 120): Promise<string | null> {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(file);
+        const img = new window.Image();
+        img.onload = () => {
+            const scale = width / img.naturalWidth;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = img.naturalHeight * scale;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { URL.revokeObjectURL(url); resolve(null); return; }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL();
+            URL.revokeObjectURL(url);
+            resolve(dataUrl);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+    });
+}
+
+/** Convert any image file to a JPEG ArrayBuffer via canvas (handles WebP, AVIF, HEIC decoded by browser, etc.) */
+function imageToJpegBuffer(file: File): Promise<{ buf: ArrayBuffer; width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new window.Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { URL.revokeObjectURL(url); reject(new Error('Canvas context failed')); return; }
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(
+                (blob) => {
+                    URL.revokeObjectURL(url);
+                    if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+                    blob.arrayBuffer().then(buf => resolve({ buf, width: img.naturalWidth, height: img.naturalHeight }));
+                },
+                file.type === 'image/png' ? 'image/png' : 'image/jpeg',
+                0.95
+            );
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to decode ${file.name}`)); };
+        img.src = url;
+    });
+}
+
+async function imageToPdfBytes(file: File): Promise<Uint8Array> {
+    const { buf, width, height } = await imageToJpegBuffer(file);
+    const pdfDoc = await PDFDocument.create();
+    const isPng = file.type === 'image/png';
+    const image = isPng
+        ? await pdfDoc.embedPng(buf)
+        : await pdfDoc.embedJpg(buf);
+    const page = pdfDoc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
+    return pdfDoc.save();
+}
+
 export default function PDFMergePage() {
-    const [files, setFiles] = useState<PDFFile[]>([]);
+    const [files, setFiles] = useState<MergeFile[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [normalizeWidth, setNormalizeWidth] = useState(false);
@@ -63,36 +137,55 @@ export default function PDFMergePage() {
     const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(firstName, '_merged');
 
     const handleFilesAdded = useCallback(async (newFiles: File[]) => {
-        const pdfs = newFiles.filter(f => f.type === 'application/pdf');
-        if (pdfs.length === 0) return;
+        const accepted = newFiles.filter(f =>
+            f.type === 'application/pdf' || f.type.startsWith('image/')
+        );
+        if (accepted.length === 0) return;
 
         flushSync(() => setIsLoading(true));
-        const newPdfFiles: PDFFile[] = [];
+        const newMergeFiles: MergeFile[] = [];
 
-        for (const f of pdfs) {
+        for (const f of accepted) {
             try {
-                const arrayBuffer = await f.arrayBuffer();
-                const pdfDoc = await PDFDocument.load(arrayBuffer);
-                const pageCount = pdfDoc.getPageCount();
+                const isImage = f.type.startsWith('image/');
 
-                const firstThumb = await renderPageThumbnail(f, 0);
-                const lastThumb = pageCount > 1 ? await renderPageThumbnail(f, pageCount - 1) : null;
+                if (isImage) {
+                    const thumb = await renderImageThumbnail(f);
+                    newMergeFiles.push({
+                        id: crypto.randomUUID(),
+                        file: f,
+                        name: f.name,
+                        size: f.size,
+                        pageCount: 1,
+                        firstThumb: thumb,
+                        lastThumb: null,
+                        isImage: true,
+                    });
+                } else {
+                    const arrayBuffer = await f.arrayBuffer();
+                    const pdfDoc = await PDFDocument.load(arrayBuffer);
+                    const pageCount = pdfDoc.getPageCount();
 
-                newPdfFiles.push({
-                    id: crypto.randomUUID(),
-                    file: f,
-                    name: f.name,
-                    size: f.size,
-                    pageCount,
-                    firstThumb,
-                    lastThumb,
-                });
+                    const firstThumb = await renderPageThumbnail(f, 0);
+                    const lastThumb = pageCount > 1 ? await renderPageThumbnail(f, pageCount - 1) : null;
+
+                    newMergeFiles.push({
+                        id: crypto.randomUUID(),
+                        file: f,
+                        name: f.name,
+                        size: f.size,
+                        pageCount,
+                        firstThumb,
+                        lastThumb,
+                        isImage: false,
+                    });
+                }
             } catch (err) {
                 console.error(`Failed to load ${f.name}:`, err);
             }
         }
 
-        setFiles(prev => [...prev, ...newPdfFiles]);
+        setFiles(prev => [...prev, ...newMergeFiles]);
         setIsLoading(false);
     }, []);
 
@@ -114,9 +207,16 @@ export default function PDFMergePage() {
         try {
             const mergedPdf = await PDFDocument.create();
 
-            for (const pdfFile of files) {
-                const arrayBuffer = await pdfFile.file.arrayBuffer();
-                const pdf = await PDFDocument.load(arrayBuffer);
+            for (const mergeFile of files) {
+                let pdfBytes: Uint8Array | ArrayBuffer;
+
+                if (mergeFile.isImage) {
+                    pdfBytes = await imageToPdfBytes(mergeFile.file);
+                } else {
+                    pdfBytes = await mergeFile.file.arrayBuffer();
+                }
+
+                const pdf = await PDFDocument.load(new Uint8Array(pdfBytes));
                 const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
                 pages.forEach(page => mergedPdf.addPage(page));
             }
@@ -166,7 +266,7 @@ export default function PDFMergePage() {
     return (
         <ToolPageLayout
             title="Merge PDF"
-            description="Combine multiple PDF files into a single document. Drag to reorder."
+            description="Combine PDFs and images into a single document. Drag to reorder."
             parentCategory="PDF Tools"
             parentHref="/pdf"
             about={toolContent['pdf-merge'].about}
@@ -181,12 +281,12 @@ export default function PDFMergePage() {
             onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
-                    files={files.map(f => ({ name: f.name, size: f.size, pageCount: f.pageCount }))}
+                    files={files.map(f => ({ name: f.name, size: f.size, type: f.isImage ? f.file.type : 'application/pdf', pageCount: f.pageCount }))}
                     onRemoveFile={(idx) => removeFile(files[idx].id)}
                     onClearAll={() => setFiles([])}
                     onAddFiles={handleFilesAdded}
                     acceptsMultipleFiles={toolContent['pdf-merge'].acceptsMultipleFiles}
-                    acceptedFileTypes={toolContent['pdf-merge'].acceptedFileTypes}
+                    acceptedFileTypes={ACCEPTED_TYPES}
                 />
             }
             sidebar={
@@ -242,11 +342,11 @@ export default function PDFMergePage() {
             }
         >
             {isLoading ? (
-                <FileProcessingOverlay message="Loading PDF files…" />
+                <FileProcessingOverlay message="Loading files…" />
             ) : files.length === 0 ? (
                 <Dropzone
                     onFilesAdded={handleFilesAdded}
-                    acceptedTypes={['application/pdf']}
+                    acceptedTypes={ACCEPTED_TYPES}
                 />
             ) : (
                 <motion.div
@@ -275,7 +375,10 @@ export default function PDFMergePage() {
                                         <img src={pdfFile.firstThumb} alt="First page" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <FileText className="w-5 h-5 text-zinc-600" />
+                                            {pdfFile.isImage
+                                                ? <ImageIcon className="w-5 h-5 text-zinc-600" />
+                                                : <FileText className="w-5 h-5 text-zinc-600" />
+                                            }
                                         </div>
                                     )}
                                 </div>
@@ -284,7 +387,7 @@ export default function PDFMergePage() {
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-zinc-100 truncate">{pdfFile.name}</p>
                                     <p className="text-xs text-zinc-500">
-                                        {formatFileSize(pdfFile.size)} · {pdfFile.pageCount} {pdfFile.pageCount === 1 ? 'page' : 'pages'}
+                                        {formatFileSize(pdfFile.size)} · {pdfFile.isImage ? 'Image → 1 page' : `${pdfFile.pageCount} ${pdfFile.pageCount === 1 ? 'page' : 'pages'}`}
                                     </p>
                                 </div>
 

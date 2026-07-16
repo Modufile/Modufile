@@ -7,6 +7,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X, ScanSearch, FileOutput, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -42,6 +43,9 @@ export default function OCRPage() {
     const [language, setLanguage] = useState('eng');
     const [progress, setProgress] = useState('');
     const [result, setResult] = useState<Blob | null>(null);
+
+    const inputName = file ? file.name : 'ocr.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_ocr');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -158,8 +162,7 @@ export default function OCRPage() {
             const blob = new Blob([pdfBytes.slice()], { type: 'application/pdf' });
             setResult(blob);
             setProgress('');
-            const base = file.name.replace(/\.pdf$/i, '');
-            return { blob, filename: `${base}-ocr.pdf` };
+            return { blob, filename: sanitized };
         } catch (err) {
             console.error('OCR failed:', err);
             setProgress('');
@@ -180,6 +183,8 @@ export default function OCRPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing}
             saveLabel="Run OCR"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

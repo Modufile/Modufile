@@ -1,9 +1,13 @@
 import { MetadataRoute } from 'next';
+import { TOOLS } from '@/config/tools';
 
 export const dynamic = 'force-static';
 
 export default function sitemap(): MetadataRoute.Sitemap {
     const baseUrl = 'https://modufile.com';
+
+    const hubs = ['/pdf', '/image', '/video'];
+    const toolUrls = Array.from(new Set(TOOLS.map(t => t.href)));
 
     return [
         {
@@ -12,35 +16,29 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'yearly',
             priority: 1,
         },
-        {
-            url: `${baseUrl}/pdf`,
+        ...hubs.map((hub) => ({
+            url: `${baseUrl}${hub}`,
             lastModified: new Date(),
-            changeFrequency: 'monthly',
+            changeFrequency: 'monthly' as const,
             priority: 0.8,
-        },
-        {
-            url: `${baseUrl}/image`,
+        })),
+        ...toolUrls.map((href) => ({
+            url: `${baseUrl}${href}`,
             lastModified: new Date(),
-            changeFrequency: 'monthly',
-            priority: 0.8,
-        },
-        {
-            url: `${baseUrl}/ocr`,
-            lastModified: new Date(),
-            changeFrequency: 'monthly',
-            priority: 0.8,
-        },
+            changeFrequency: 'monthly' as const,
+            priority: 0.7,
+        })),
         {
             url: `${baseUrl}/contact`,
             lastModified: new Date(),
             changeFrequency: 'yearly',
             priority: 0.5,
         },
-        ...['split', 'merge', 'rotate', 'organize', 'remove-pages', 'resize-pages', 'watermark', 'page-numbers', 'flatten', 'redact', 'metadata'].map((tool) => ({
-            url: `${baseUrl}/pdf/${tool}`,
+        {
+            url: `${baseUrl}/thanks`,
             lastModified: new Date(),
-            changeFrequency: 'monthly' as const,
-            priority: 0.7,
-        })),
+            changeFrequency: 'yearly',
+            priority: 0.3,
+        },
     ];
 }

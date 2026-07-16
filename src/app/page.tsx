@@ -37,6 +37,7 @@ const actionMap: Record<string, string> = {
   '/image/resize': 'Edit',
   '/image/batch': 'Edit',
   '/ocr': 'Convert',
+  '/mermaid-to-flowchart': 'Edit',
 };
 
 export default function Home() {
@@ -45,7 +46,7 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [activeAction, setActiveAction] = useState<string>('All');
 
-  const categories = ['All', 'PDF', 'Image', 'OCR'];
+  const categories = ['All', 'PDF', 'Image', 'Video', 'Archive', 'OCR', 'Diagram', 'Utility'];
   const actions = ['All', 'Organize', 'Edit', 'Convert', 'Security', 'Optimize'];
 
   // Filter tools based on Category and Action

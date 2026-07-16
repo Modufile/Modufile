@@ -19,6 +19,40 @@ export interface ToolContent {
 }
 
 export const toolContent: Record<string, ToolContent> = {
+    'mermaid-to-flowchart': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['.mmd', '.md'],
+        about: 'Modufile\'s Mermaid to Flowchart editor is a fully client-side diagram builder for Mermaid flowcharts. You can drag nodes onto a visual canvas, connect them, style them, and edit Mermaid code side-by-side with a live Mermaid.js render. The visual editor and Mermaid source stay in sync, local autosave keeps your work in the browser, and exports are generated client-side as Mermaid files, SVG, PNG, or PDF. This makes it a privacy-first way to design system diagrams, decision trees, onboarding flows, and process maps without sending your diagrams to a server.',
+        techSetup: [
+            { library: 'mermaid', purpose: 'Validates Mermaid syntax and renders export-ready SVG diagrams in the browser' },
+            { library: 'zustand', purpose: 'Persists diagram state, undo/redo history, viewport, and autosave locally' },
+            { library: 'pdf-lib', purpose: 'Converts high-resolution diagram exports into downloadable PDF files' },
+        ],
+        faqs: [
+            {
+                question: 'Is the Mermaid flowchart editor fully client-side?',
+                answer: 'Yes. Diagram editing, Mermaid validation, autosave, and export all run in your browser. Your Mermaid files and flowcharts are never uploaded to a server.',
+            },
+            {
+                question: 'Can I edit Mermaid code directly and keep the visual diagram in sync?',
+                answer: 'Yes. The code editor and visual canvas use two-way sync. When the Mermaid code is valid, the visual graph updates automatically; when you drag or style nodes visually, the Mermaid source updates too.',
+            },
+            {
+                question: 'What file formats can I import and export?',
+                answer: 'You can import `.mmd` files or Markdown files that contain Mermaid code blocks. Exports are available as Mermaid source, SVG, PNG, and PDF.',
+            },
+            {
+                question: 'Does the editor support large graphs?',
+                answer: 'Yes. The editor uses a dedicated graph state layer, viewport transforms, and a lightweight visual canvas to stay responsive with large diagrams, including graphs with 100+ nodes on capable devices.',
+            },
+            {
+                question: 'Can I reuse styles across diagrams?',
+                answer: 'Yes. Built-in theme presets can be applied to an entire diagram or a selection, and the current theme can be exported as JSON for reuse in future diagrams.',
+            },
+        ],
+    },
+
     /* ------------------------------------------------------------------ */
     /*  PDF TOOLS                                                          */
     /* ------------------------------------------------------------------ */
@@ -26,8 +60,8 @@ export const toolContent: Record<string, ToolContent> = {
     'pdf-merge': {
         importance: 1,
         acceptsMultipleFiles: true,
-        acceptedFileTypes: ['application/pdf'],
-        about: 'Modufile\'s Merge PDF tool lets you combine PDF files into a single document directly in your browser. It uses the pdf-lib library running entirely on the client side, so your files are never uploaded to any server. You can merge multiple PDFs, reorder them with drag and drop, and download the result instantly — with no file size limits, no account required, and no watermarks on the output. This makes it a privacy-first alternative to tools like iLovePDF or Smallpdf, which process files on their servers. Whether you need to combine contracts, join scanned pages, or merge PDF documents for a report, Modufile handles it without compromising quality or privacy.',
+        acceptedFileTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/heic', 'image/heif', 'image/tiff', 'image/bmp', 'image/gif'],
+        about: 'Modufile\'s Merge PDF tool lets you combine PDF files and images into a single document directly in your browser. It uses the pdf-lib library running entirely on the client side, so your files are never uploaded to any server. You can merge multiple PDFs, add images (JPG, PNG, WebP, HEIC, and more), reorder them with drag and drop, and download the result instantly — with no file size limits, no account required, and no watermarks on the output. This makes it a privacy-first alternative to tools like iLovePDF or Smallpdf, which process files on their servers. Whether you need to combine contracts, join scanned pages, add photos to a report, or merge PDF documents, Modufile handles it without compromising quality or privacy.',
         techSetup: [
             { library: 'pdf-lib', purpose: 'Copies and combines pages from multiple PDF documents into a single output file' },
         ],
@@ -1109,6 +1143,130 @@ export const toolContent: Record<string, ToolContent> = {
             { question: 'Can I select multiple languages for a single document?', answer: 'Yes. Tesseract.js supports multi-language recognition. If your scanned document contains text in multiple languages, select all relevant languages for more accurate extraction across the entire document.' },
             { question: 'What is the invisible text layer?', answer: 'It is a standard PDF feature where text is rendered in "invisible" mode — positioned exactly over the corresponding areas of the page image. PDF viewers can detect and interact with this text (for search, selection, and copying) even though it is not visually displayed. This is the same technique used by Adobe Acrobat\'s OCR feature.' },
             { question: 'Why 200 DPI?', answer: '200 DPI provides a good balance between OCR accuracy and processing speed. Higher DPI yields slightly better recognition for small text but significantly increases processing time and memory usage. For most scanned documents, 200 DPI delivers accurate results.' },
+        ],
+    },
+
+    /* ------------------------------------------------------------------ */
+    /*  VIDEO TOOLS                                                        */
+    /* ------------------------------------------------------------------ */
+
+    'video-convert': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['video/*'],
+        about: 'Modufile\'s Convert Video tool converts videos between MP4 and WebM directly in your browser using the WebCodecs API — the same hardware-accelerated encoders your operating system uses. Unlike online converters that upload your footage to a server, or ffmpeg-based tools that download a 30 MB engine, this tool is lightweight and your video never leaves your device. You can also downscale to 1080p, 720p, or 480p and pick a quality preset while converting. It reads MP4, WebM, MOV, MKV, and more.',
+        techSetup: [
+            { library: 'mediabunny', purpose: 'Demuxes and remuxes media containers, and orchestrates hardware-accelerated transcoding via WebCodecs' },
+        ],
+        faqs: [
+            { question: 'Is my video uploaded anywhere?', answer: 'No. Decoding and encoding happen entirely on your device using your browser\'s built-in WebCodecs API. The file never leaves your computer, which also means there is no upload wait and no server file-size limit.' },
+            { question: 'Which input formats are supported?', answer: 'MP4, WebM, MOV, MKV, and most common containers. Codec support depends on your browser and hardware — H.264, VP8, VP9, and AV1 are widely supported. If a file cannot be decoded, the tool tells you immediately instead of failing at the end.' },
+            { question: 'Why is conversion so fast?', answer: 'The tool uses your device\'s hardware video encoder through the WebCodecs API — the same silicon used by video calls and screen recorders — rather than a software encoder compiled to WebAssembly. On most machines this converts faster than real-time.' },
+            { question: 'Does converting reduce quality?', answer: 'Any re-encode is technically lossy, but at the High quality preset the difference is not visible for typical footage. Choose Medium or Low to trade quality for a smaller file.' },
+            { question: 'Is there a file size limit?', answer: 'No hard limit — processing is local, so the practical limit is your device\'s memory. Multi-gigabyte files may be slow on low-end hardware.' },
+        ],
+    },
+
+    'video-trim': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['video/*'],
+        about: 'Modufile\'s Trim Video tool cuts a clip out of a video by start and end time, entirely in your browser. When the output format matches the source, the video data is copied without re-encoding — trimming a clip out of an hour-long recording takes seconds and loses zero quality. Preview the video, set the trim points from the playhead, and save. Nothing is uploaded.',
+        techSetup: [
+            { library: 'mediabunny', purpose: 'Trims media by timestamp with direct packet copying (no re-encode) when formats match' },
+        ],
+        faqs: [
+            { question: 'Does trimming re-encode my video?', answer: 'Not when the output format matches the source — the compressed video packets are copied directly, so trimming is near-instant and completely lossless. Choosing a different output format triggers a re-encode.' },
+            { question: 'How precise is the cut?', answer: 'Cuts snap to the nearest keyframe when copying without re-encoding, which is typically within a couple of seconds of your chosen point. For frame-exact cuts, choose a different output format to force a re-encode.' },
+            { question: 'Is my video uploaded to a server?', answer: 'No. The file is read, trimmed, and written entirely on your device using the WebCodecs API. It never leaves your browser.' },
+        ],
+    },
+
+    'video-extract-audio': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['video/*', 'audio/*'],
+        about: 'Modufile\'s Extract Audio tool pulls the audio track out of a video and saves it as MP3, M4A (AAC), or WAV — for example turning a recorded lecture, interview, or music video into an audio file. The video is decoded and the audio encoded entirely in your browser; nothing is uploaded. It also works on audio files, making it a general audio converter.',
+        techSetup: [
+            { library: 'mediabunny', purpose: 'Discards the video track and encodes the audio stream to the chosen format via WebCodecs' },
+            { library: '@mediabunny/mp3-encoder', purpose: 'Provides MP3 encoding, which browsers do not support natively' },
+        ],
+        faqs: [
+            { question: 'Which output format should I choose?', answer: 'MP3 plays everywhere and is the safe default. M4A (AAC) gives better quality at the same size and suits Apple devices. WAV is uncompressed and lossless but produces very large files — use it for editing, not sharing.' },
+            { question: 'Is the video uploaded anywhere?', answer: 'No. The audio track is extracted and encoded entirely on your device. Your video never leaves your browser.' },
+            { question: 'Can I extract audio from any video?', answer: 'Any video your browser can decode — MP4, WebM, MOV, and MKV with common codecs all work. The tool warns you upfront if the file has no audio track or an unsupported codec.' },
+        ],
+    },
+
+    /* ------------------------------------------------------------------ */
+    /*  ARCHIVE TOOLS                                                      */
+    /* ------------------------------------------------------------------ */
+
+    'zip-create': {
+        importance: 3,
+        acceptsMultipleFiles: true,
+        acceptedFileTypes: ['*/*'],
+        about: 'Modufile\'s Create ZIP tool bundles any files into a single ZIP archive directly in your browser. Unlike online zip services, your files are never uploaded — compression runs locally using the fflate library, which is one of the fastest JavaScript compression engines available. Choose between balanced compression, maximum compression, or store-only mode for files that are already compressed.',
+        techSetup: [
+            { library: 'fflate', purpose: 'High-performance DEFLATE compression and ZIP container writing in pure JavaScript' },
+        ],
+        faqs: [
+            { question: 'Are my files uploaded to create the ZIP?', answer: 'No. Compression happens entirely in your browser using the fflate library. Files are read from disk, compressed in memory, and the resulting archive is downloaded — nothing touches a server.' },
+            { question: 'Which compression level should I use?', answer: 'Balanced is right for most cases. Use "Smallest file" for text-heavy content like documents and source code. Use "Store only" for files that are already compressed (JPG, MP4, existing ZIPs) — compressing them again wastes time for almost no size gain.' },
+            { question: 'Is there a size limit?', answer: 'No hard limit — the practical constraint is your device\'s memory, since the archive is assembled in RAM. Several hundred megabytes is comfortable on a modern machine.' },
+            { question: 'Can I create password-protected ZIPs?', answer: 'Not yet. Standard ZIP encryption is weak and modern AES-encrypted ZIPs have limited support across extractors, so this is a planned feature rather than a default.' },
+        ],
+    },
+
+    'zip-extract': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['.zip', 'application/zip'],
+        about: 'Modufile\'s Extract ZIP tool opens a ZIP archive in your browser and lets you download its files — individually or all at once. The archive is decompressed locally with fflate; nothing is uploaded, so it is safe to open archives containing private documents. It is also handy for peeking inside a ZIP before deciding what to extract.',
+        techSetup: [
+            { library: 'fflate', purpose: 'Streams and decompresses ZIP archives in pure JavaScript' },
+        ],
+        faqs: [
+            { question: 'Is the archive uploaded to a server?', answer: 'No. The ZIP is decompressed entirely in your browser\'s memory. Your files never leave your device, which makes this safe for archives containing sensitive documents.' },
+            { question: 'Can I extract password-protected or RAR archives?', answer: 'Not currently — encrypted ZIPs and RAR/7z formats are not supported yet. Standard (unencrypted) ZIP archives, which are the vast majority, work fully.' },
+            { question: 'Why does my browser ask permission when I click Extract All?', answer: 'Extract All downloads each file individually, and browsers ask once before allowing a page to download multiple files. Allow it and every file in the archive will download in sequence.' },
+        ],
+    },
+
+    /* ------------------------------------------------------------------ */
+    /*  UTILITY TOOLS                                                      */
+    /* ------------------------------------------------------------------ */
+
+    'image-exif': {
+        importance: 2,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: ['image/*'],
+        about: 'Modufile\'s EXIF tool shows you exactly what hidden metadata your photos carry — GPS coordinates, camera model, serial numbers, timestamps, editing software — and removes it without touching the image itself. Stripping works by deleting whole metadata segments from the file, so the pixels are never re-encoded and there is zero quality loss. Everything runs locally: ironically, most online "EXIF removers" require you to upload the very photo whose location data you are trying to protect.',
+        techSetup: [
+            { library: 'exifr', purpose: 'Parses EXIF, GPS, XMP, and IPTC metadata blocks for display' },
+            { library: 'custom segment parser', purpose: 'Removes JPEG APP1/APP13/COM segments and PNG text chunks losslessly — no re-encoding' },
+        ],
+        faqs: [
+            { question: 'What metadata do photos actually contain?', answer: 'Photos from phones typically embed GPS coordinates of where they were taken, the exact time, the device make and model, and sometimes the owner name or editing history. Anyone you send the file to can read all of it with free tools.' },
+            { question: 'Does removing metadata reduce image quality?', answer: 'No. Modufile deletes the metadata segments from the file structure without decoding or re-encoding the image data. The pixels are byte-for-byte identical to the original.' },
+            { question: 'Which formats can be cleaned?', answer: 'JPEG and PNG are stripped losslessly. For other formats (WebP, HEIC, TIFF), convert the image first with the Convert Image tool — conversion drops metadata as a side effect.' },
+            { question: 'Is my photo uploaded to read its metadata?', answer: 'No. Both reading and stripping happen entirely in your browser. This matters: uploading a photo to a metadata-removal website hands its location data to that website before it is removed.' },
+        ],
+    },
+
+    'qr-generator': {
+        importance: 3,
+        acceptsMultipleFiles: false,
+        acceptedFileTypes: [],
+        about: 'Modufile\'s QR Code Generator creates QR codes for URLs, Wi-Fi credentials, contact details, or any text — rendered instantly in your browser as you type. Download as PNG for documents and print, or SVG for infinitely scalable use in design tools. Because generation is fully client-side, whatever you encode — including Wi-Fi passwords — is never sent to or logged by any server, unlike most online QR generators.',
+        techSetup: [
+            { library: 'qrcode', purpose: 'Encodes text into QR symbols and renders them to PNG data URLs and SVG markup' },
+        ],
+        faqs: [
+            { question: 'Is what I type logged anywhere?', answer: 'No. The QR code is computed entirely in your browser. This matters for QR codes that encode private data like Wi-Fi passwords — most online generators receive that data on their servers, and some "free" ones even redirect your QR through tracking URLs.' },
+            { question: 'PNG or SVG — which should I download?', answer: 'PNG works everywhere and is right for documents, slides, and print at the generated size. SVG is a vector format that scales to any size without pixelation — use it in design tools or for large-format printing.' },
+            { question: 'What does error correction do?', answer: 'QR codes include redundancy so they scan even when partially damaged or obscured. Level H survives up to 30% damage — choose it if you plan to place a logo over the center. Higher levels make the code denser, so L or M is better for very long text.' },
+            { question: 'How do I make a Wi-Fi QR code?', answer: 'Use the format WIFI:T:WPA;S:YourNetworkName;P:YourPassword;; — phones that scan it will offer to join the network automatically.' },
         ],
     },
 

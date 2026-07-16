@@ -7,6 +7,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X, Lock, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -27,6 +28,9 @@ export default function UnlockPdfPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<Blob | null>(null);
+
+    const inputName = file ? file.name : 'unlocked.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_unlocked');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -78,9 +82,7 @@ export default function UnlockPdfPage() {
             const blob = new Blob([bytes], { type: 'application/pdf' });
             setResult(blob);
 
-            const base = file.name.replace(/\.pdf$/i, '');
-            const filename = `${base}-unlocked.pdf`;
-            return { blob, filename };
+            return { blob, filename: sanitized };
         } catch (err) {
             setError('Failed to unlock PDF. The file may be corrupted.');
             console.error('Unlock failed:', err);
@@ -100,6 +102,8 @@ export default function UnlockPdfPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing || !password}
             saveLabel="Unlock PDF"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

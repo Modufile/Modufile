@@ -5,8 +5,7 @@ import { Dropzone } from '@/components/ui';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
-import { FileText, X, FileOutput, AlertTriangle } from 'lucide-react';
+import { FileText, X, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 
@@ -111,12 +110,6 @@ export default function OfficeToPdfPage() {
                 </div>
             )}
 
-            <FloatingActionBar
-                isVisible={false}
-                isProcessing={false}
-                onAction={() => {}}
-                actionLabel={<><FileOutput className="w-4 h-4" /> Convert to PDF</>}
-            />
         </ToolPageLayout>
     );
 }

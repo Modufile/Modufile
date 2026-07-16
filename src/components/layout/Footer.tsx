@@ -13,7 +13,7 @@ export function Footer() {
     return (
         <footer className="border-t border-zinc-900 bg-background-app py-12">
             <div className="max-w-7xl mx-auto px-6">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8 mb-10">
                     {/* Brand */}
                     <div className="col-span-2 md:col-span-1">
                         <div className="flex items-center gap-2 mb-4">
@@ -72,8 +72,21 @@ export function Footer() {
                             <li><Link href="/image/convert" className="hover:text-zinc-300 transition-colors">Convert Image</Link></li>
                             <li><Link href="/image/compress" className="hover:text-zinc-300 transition-colors">Compress Image</Link></li>
                             <li><Link href="/image/resize" className="hover:text-zinc-300 transition-colors">Resize Image</Link></li>
-                            <li><Link href="/image/batch" className="hover:text-zinc-300 transition-colors">Batch Edit</Link></li>
+                            <li><Link href="/image/exif" className="hover:text-zinc-300 transition-colors">Remove EXIF</Link></li>
                             <li><Link href="/ocr" className="hover:text-zinc-300 transition-colors">OCR</Link></li>
+                        </ul>
+                    </div>
+
+                    {/* Video, Archive & Utility */}
+                    <div>
+                        <h4 className="text-zinc-100 font-medium mb-4 text-sm">Video & Files</h4>
+                        <ul className="space-y-3 text-sm text-zinc-500">
+                            <li><Link href="/video/convert" className="hover:text-zinc-300 transition-colors">Convert Video</Link></li>
+                            <li><Link href="/video/trim" className="hover:text-zinc-300 transition-colors">Trim Video</Link></li>
+                            <li><Link href="/video/extract-audio" className="hover:text-zinc-300 transition-colors">Video to MP3</Link></li>
+                            <li><Link href="/zip" className="hover:text-zinc-300 transition-colors">Create ZIP</Link></li>
+                            <li><Link href="/unzip" className="hover:text-zinc-300 transition-colors">Extract ZIP</Link></li>
+                            <li><Link href="/qr" className="hover:text-zinc-300 transition-colors">QR Generator</Link></li>
                         </ul>
                     </div>
                 </div>

@@ -102,3 +102,4 @@ tools_update.js
 
 # Zeta / LibreOffice WASM (soffice.js 858 KB + soffice.data.js.metadata + zeta.js)
 /public/zeta/
+/.tmp/

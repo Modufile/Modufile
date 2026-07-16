@@ -123,23 +123,23 @@ export default function LabPage() {
     };
 
     return (
-        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-8">
+        <div className="min-h-screen bg-zinc-950 p-8">
             <div className="max-w-2xl mx-auto">
-                <h1 className="text-3xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+                <h1 className="text-3xl font-semibold text-zinc-100 mb-2">
                     🧪 WASM Lab
                 </h1>
-                <p className="text-zinc-600 dark:text-zinc-400 mb-8">
+                <p className="text-zinc-400 mb-8">
                     Verify that all WebAssembly libraries load correctly in your browser.
                 </p>
 
                 <div className="space-y-4">
                     {/* PDF-lib Test */}
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <FileText className="w-6 h-6 text-red-500" />
                                 <div>
-                                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100">pdf-lib</h3>
+                                    <h3 className="font-medium text-zinc-100">pdf-lib</h3>
                                     <p className="text-sm text-zinc-500">PDF creation and manipulation</p>
                                 </div>
                             </div>
@@ -148,7 +148,7 @@ export default function LabPage() {
                                 <button
                                     onClick={testPdfLib}
                                     disabled={pdfTest.status === 'loading'}
-                                    className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50"
+                                    className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-200 disabled:opacity-50"
                                 >
                                     Test
                                 </button>
@@ -162,12 +162,12 @@ export default function LabPage() {
                     </div>
 
                     {/* FFmpeg Test */}
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <Video className="w-6 h-6 text-blue-500" />
                                 <div>
-                                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100">ffmpeg.wasm</h3>
+                                    <h3 className="font-medium text-zinc-100">ffmpeg.wasm</h3>
                                     <p className="text-sm text-zinc-500">Video/audio processing (requires SharedArrayBuffer)</p>
                                 </div>
                             </div>
@@ -176,7 +176,7 @@ export default function LabPage() {
                                 <button
                                     onClick={testFfmpeg}
                                     disabled={ffmpegTest.status === 'loading'}
-                                    className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50"
+                                    className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-200 disabled:opacity-50"
                                 >
                                     Test
                                 </button>
@@ -190,12 +190,12 @@ export default function LabPage() {
                     </div>
 
                     {/* Tesseract Test */}
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <Eye className="w-6 h-6 text-purple-500" />
                                 <div>
-                                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100">tesseract.js</h3>
+                                    <h3 className="font-medium text-zinc-100">tesseract.js</h3>
                                     <p className="text-sm text-zinc-500">OCR text extraction</p>
                                 </div>
                             </div>
@@ -204,7 +204,7 @@ export default function LabPage() {
                                 <button
                                     onClick={testTesseract}
                                     disabled={ocrTest.status === 'loading'}
-                                    className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50"
+                                    className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-md text-sm font-medium hover:bg-zinc-200 disabled:opacity-50"
                                 >
                                     Test
                                 </button>
@@ -219,8 +219,8 @@ export default function LabPage() {
                 </div>
 
                 {/* SharedArrayBuffer Check */}
-                <div className="mt-8 p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg">
-                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">Environment Check</h3>
+                <div className="mt-8 p-4 bg-zinc-900 rounded-lg">
+                    <h3 className="font-medium text-zinc-100 mb-2">Environment Check</h3>
                     <ul className="space-y-1 text-sm">
                         <li className="flex items-center gap-2">
                             {typeof SharedArrayBuffer !== 'undefined' ? (
@@ -228,7 +228,7 @@ export default function LabPage() {
                             ) : (
                                 <XCircle className="w-4 h-4 text-red-500" />
                             )}
-                            <span className="text-zinc-600 dark:text-zinc-400">SharedArrayBuffer</span>
+                            <span className="text-zinc-400">SharedArrayBuffer</span>
                         </li>
                         <li className="flex items-center gap-2">
                             {typeof WebAssembly !== 'undefined' ? (
@@ -236,7 +236,7 @@ export default function LabPage() {
                             ) : (
                                 <XCircle className="w-4 h-4 text-red-500" />
                             )}
-                            <span className="text-zinc-600 dark:text-zinc-400">WebAssembly</span>
+                            <span className="text-zinc-400">WebAssembly</span>
                         </li>
                     </ul>
                 </div>

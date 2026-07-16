@@ -7,6 +7,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -25,6 +26,9 @@ export default function RepairPdfPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<Blob | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const inputName = file ? file.name : 'repaired.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_repaired');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -62,8 +66,7 @@ export default function RepairPdfPage() {
 
             const blob = new Blob([bytes], { type: 'application/pdf' });
             setResult(blob);
-            const base = file.name.replace(/\.pdf$/i, '');
-            return { blob, filename: `${base}-repaired.pdf` };
+            return { blob, filename: sanitized };
         } catch (err) {
             setError('Could not repair this PDF. The file may be too severely damaged.');
             console.error('Repair failed:', err);
@@ -84,6 +87,8 @@ export default function RepairPdfPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing}
             saveLabel="Repair PDF"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

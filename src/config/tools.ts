@@ -4,12 +4,6 @@ import {
     Scissors,
     ImageDown,
     Image,
-    Film,
-    Eye,
-    Zap,
-    Lock,
-    ArrowRight,
-    Github,
     Layers,
     RotateCw,
     Stamp,
@@ -31,6 +25,14 @@ import {
     Table,
     FileInput,
     ScanText,
+    GitBranch,
+    Film,
+    Scissors as ScissorsIcon,
+    Music,
+    FolderArchive,
+    FolderOpen,
+    MapPinOff,
+    QrCode,
 } from 'lucide-react';
 
 export const TOOLS = [
@@ -237,6 +239,16 @@ export const TOOLS = [
 
     // Image Tools
     {
+        title: 'Mermaid Flowchart',
+        description: 'Visual builder with live Mermaid sync.',
+        href: '/mermaid-to-flowchart',
+        icon: GitBranch,
+        iconColor: '#38bdf8',
+        category: 'Diagram',
+        gradient: 'from-sky-500/10 to-transparent'
+    },
+
+    {
         title: 'Compress Image',
         description: 'Reduce file size efficiently.',
         href: '/image/compress',
@@ -271,6 +283,76 @@ export const TOOLS = [
         iconColor: '#3b82f6',
         category: 'Image',
         gradient: 'from-blue-500/10 to-transparent'
+    },
+
+    {
+        title: 'View & Remove EXIF',
+        description: 'See and strip hidden photo metadata.',
+        href: '/image/exif',
+        icon: MapPinOff,
+        iconColor: '#3b82f6',
+        category: 'Image',
+        gradient: 'from-blue-500/10 to-transparent'
+    },
+
+    // Video Tools
+    {
+        title: 'Convert Video',
+        description: 'MP4, WebM, MOV — hardware-accelerated.',
+        href: '/video/convert',
+        icon: Film,
+        iconColor: '#f59e0b',
+        category: 'Video',
+        gradient: 'from-amber-500/10 to-transparent'
+    },
+    {
+        title: 'Trim Video',
+        description: 'Cut clips by start and end time, losslessly.',
+        href: '/video/trim',
+        icon: ScissorsIcon,
+        iconColor: '#f59e0b',
+        category: 'Video',
+        gradient: 'from-amber-500/10 to-transparent'
+    },
+    {
+        title: 'Extract Audio',
+        description: 'Video to MP3, M4A, or WAV.',
+        href: '/video/extract-audio',
+        icon: Music,
+        iconColor: '#f59e0b',
+        category: 'Video',
+        gradient: 'from-amber-500/10 to-transparent'
+    },
+
+    // Archive Tools
+    {
+        title: 'Create ZIP',
+        description: 'Bundle files into a compressed archive.',
+        href: '/zip',
+        icon: FolderArchive,
+        iconColor: '#10b981',
+        category: 'Archive',
+        gradient: 'from-emerald-500/10 to-transparent'
+    },
+    {
+        title: 'Extract ZIP',
+        description: 'Open archives and download their files.',
+        href: '/unzip',
+        icon: FolderOpen,
+        iconColor: '#10b981',
+        category: 'Archive',
+        gradient: 'from-emerald-500/10 to-transparent'
+    },
+
+    // Utility Tools
+    {
+        title: 'QR Generator',
+        description: 'Links, Wi-Fi, text — PNG or SVG.',
+        href: '/qr',
+        icon: QrCode,
+        iconColor: '#ec4899',
+        category: 'Utility',
+        gradient: 'from-pink-500/10 to-transparent'
     },
 
     // OCR Tools

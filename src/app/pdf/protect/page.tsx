@@ -7,6 +7,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -29,6 +30,9 @@ export default function ProtectPdfPage() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<Blob | null>(null);
+
+    const inputName = file ? file.name : 'protected.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_protected');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -77,9 +81,7 @@ export default function ProtectPdfPage() {
             const blob = new Blob([bytes], { type: 'application/pdf' });
             setResult(blob);
 
-            const base = file.name.replace(/\.pdf$/i, '');
-            const filename = `${base}-protected.pdf`;
-            return { blob, filename };
+            return { blob, filename: sanitized };
         } finally {
             setIsProcessing(false);
         }
@@ -96,6 +98,8 @@ export default function ProtectPdfPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing || (!userPassword && !ownerPassword)}
             saveLabel="Protect PDF"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

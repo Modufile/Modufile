@@ -45,6 +45,16 @@ const nextConfig: NextConfig = {
     return config;
   },
 
+  // Dev-only: static export doesn't support redirects(); production uses public/_redirects
+  async redirects() {
+    if (isProd) return [];
+
+    return [
+      { source: '/open-source', destination: '/thanks/', permanent: true },
+      { source: '/licenses', destination: '/thanks/', permanent: true },
+    ];
+  },
+
   // Headers for WASM + SharedArrayBuffer support
   async headers() {
     // In production, Cloudflare uses public/_headers, and Next.js static exports don't support headers()

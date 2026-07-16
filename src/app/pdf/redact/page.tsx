@@ -6,7 +6,8 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FileText, X, ChevronLeft, ChevronRight, Trash2, Search, ChevronDown, ChevronUp, ShieldOff } from 'lucide-react';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
+import { FileText, X, Trash2, Search, ChevronDown, ChevronUp, ShieldOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
 import { loadMuPDF } from '@/lib/core/mupdf-loader';
@@ -66,12 +67,20 @@ export default function RedactPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    // Tracks which page is most visible in the viewport (for the sidebar areas label)
     const [currentPage, setCurrentPage] = useState(0);
     const [redactAreas, setRedactAreas] = useState<RedactRect[]>([]);
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
-    const [currentDraw, setCurrentDraw] = useState<{ x: number; y: number } | null>(null);
-    const [pageRendered, setPageRendered] = useState(false);
+    const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
+
+    // Drawing state — includes which page the user is drawing on
+    const [drawState, setDrawState] = useState<{
+        pageIndex: number;
+        start: { x: number; y: number };
+        current: { x: number; y: number };
+    } | null>(null);
+
+    const inputName = file ? file.name : 'redacted.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_redacted');
 
     // Metadata
     const [metadata, setMetadata] = useState<Metadata>(EmptyMetadata);
@@ -79,10 +88,11 @@ export default function RedactPage() {
     const [stripMetadata, setStripMetadata] = useState(true);
     const [metaExpanded, setMetaExpanded] = useState(true);
 
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const overlayRef = useRef<HTMLDivElement>(null);
+    // Per-page refs — keyed by page index
+    const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+    const overlayRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+    const pageContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const pdfDocRef = useRef<any>(null);
-    const pageScaleRef = useRef(1);
 
     const handleFileAdded = useCallback(async (files: File[]) => {
         const f = files[0];
@@ -101,6 +111,7 @@ export default function RedactPage() {
             });
             setCurrentPage(0);
             setRedactAreas([]);
+            setRenderedPages(new Set());
 
             // Load existing metadata
             const loaded: Metadata = {
@@ -132,13 +143,12 @@ export default function RedactPage() {
         }
     }, [storedFiles, source, handleFileAdded, setStoredFiles]);
 
-    // Render current page using pdfjs-dist
+    // Render all pages sequentially when a file is loaded
     useEffect(() => {
         if (!file) return;
         let cancelled = false;
 
-        const render = async () => {
-            setPageRendered(false);
+        const renderAll = async () => {
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
                 pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
@@ -149,26 +159,52 @@ export default function RedactPage() {
                 pdfDocRef.current = await pdfjs.getDocument({ data: buf }).promise;
             }
 
-            const page = await pdfDocRef.current.getPage(currentPage + 1);
-            const viewport = page.getViewport({ scale: 1.5 });
-            pageScaleRef.current = 1.5;
+            for (let i = 0; i < file.pageCount; i++) {
+                if (cancelled) break;
 
-            const canvas = canvasRef.current;
-            if (!canvas || cancelled) return;
+                const page = await pdfDocRef.current.getPage(i + 1);
+                const viewport = page.getViewport({ scale: 1.5 });
 
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+                const canvas = canvasRefs.current.get(i);
+                if (!canvas || cancelled) continue;
 
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
 
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            if (!cancelled) setPageRendered(true);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) continue;
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                if (!cancelled) setRenderedPages(prev => new Set([...prev, i]));
+            }
         };
 
-        render();
+        renderAll();
         return () => { cancelled = true; };
-    }, [file, currentPage]);
+    }, [file]);
+
+    // IntersectionObserver — tracks which page is most visible to update currentPage indicator
+    useEffect(() => {
+        if (!file) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                let maxRatio = -1;
+                let visiblePage = 0;
+                entries.forEach(entry => {
+                    if (entry.intersectionRatio > maxRatio) {
+                        maxRatio = entry.intersectionRatio;
+                        visiblePage = parseInt(entry.target.getAttribute('data-page-idx') ?? '0', 10);
+                    }
+                });
+                if (maxRatio >= 0) setCurrentPage(visiblePage);
+            },
+            { threshold: [0, 0.25, 0.5, 0.75, 1.0] },
+        );
+
+        pageContainerRefs.current.forEach(el => observer.observe(el));
+        return () => observer.disconnect();
+    }, [file]);
 
     const removeFile = useCallback(() => {
         setFile(null);
@@ -177,6 +213,7 @@ export default function RedactPage() {
         setMetadata(EmptyMetadata);
         setOriginalMetadata(EmptyMetadata);
         setStripMetadata(true);
+        setRenderedPages(new Set());
     }, []);
 
     const [hoveredRedactId, setHoveredRedactId] = useState<string | null>(null);
@@ -184,26 +221,26 @@ export default function RedactPage() {
     const [dragState, setDragState] = useState<{
         type: 'move' | 'resize';
         id: string;
+        pageIndex: number;
         startX: number;
         startY: number;
         initialRect: RedactRect;
-        handle?: string; // 'nw', 'ne', 'sw', 'se'
+        handle?: string;
     } | null>(null);
 
-    // Global drag handler — deltas are converted to canvas-pixel space
+    // Global drag handler — uses the canvas/overlay for the dragged rect's page
     useEffect(() => {
         if (!dragState) return;
 
         const handleGlobalMove = (e: MouseEvent) => {
-            if (!overlayRef.current || !canvasRef.current) return;
-            const overlayRect = overlayRef.current.getBoundingClientRect();
-            const canvas = canvasRef.current;
+            const overlay = overlayRefs.current.get(dragState.pageIndex);
+            const canvas = canvasRefs.current.get(dragState.pageIndex);
+            if (!overlay || !canvas) return;
 
-            // CSS-to-canvas ratio for converting mouse deltas
+            const overlayRect = overlay.getBoundingClientRect();
             const cssToCanvasX = canvas.width / overlayRect.width;
             const cssToCanvasY = canvas.height / overlayRect.height;
 
-            // Calculate delta in canvas-pixel space
             const dx = (e.clientX - dragState.startX) * cssToCanvasX;
             const dy = (e.clientY - dragState.startY) * cssToCanvasY;
 
@@ -216,26 +253,18 @@ export default function RedactPage() {
                 if (dragState.type === 'move') {
                     newR.x = init.x + dx;
                     newR.y = init.y + dy;
-                    // Clamp to canvas bounds
                     newR.x = Math.max(0, Math.min(newR.x, canvas.width - newR.width));
                     newR.y = Math.max(0, Math.min(newR.y, canvas.height - newR.height));
                 } else if (dragState.type === 'resize' && dragState.handle) {
-                    // Resize logic (all in canvas-pixel space)
-                    if (dragState.handle.includes('e')) {
-                        newR.width = Math.max(10, init.width + dx);
-                    }
-                    if (dragState.handle.includes('s')) {
-                        newR.height = Math.max(10, init.height + dy);
-                    }
+                    if (dragState.handle.includes('e')) newR.width = Math.max(10, init.width + dx);
+                    if (dragState.handle.includes('s')) newR.height = Math.max(10, init.height + dy);
                     if (dragState.handle.includes('w')) {
-                        const maxDelta = init.width - 10;
-                        const validDx = Math.min(dx, maxDelta);
+                        const validDx = Math.min(dx, init.width - 10);
                         newR.x = init.x + validDx;
                         newR.width = init.width - validDx;
                     }
                     if (dragState.handle.includes('n')) {
-                        const maxDelta = init.height - 10;
-                        const validDy = Math.min(dy, maxDelta);
+                        const validDy = Math.min(dy, init.height - 10);
                         newR.y = init.y + validDy;
                         newR.height = init.height - validDy;
                     }
@@ -244,9 +273,7 @@ export default function RedactPage() {
             }));
         };
 
-        const handleGlobalUp = () => {
-            setDragState(null);
-        };
+        const handleGlobalUp = () => setDragState(null);
 
         window.addEventListener('mousemove', handleGlobalMove);
         window.addEventListener('mouseup', handleGlobalUp);
@@ -258,81 +285,69 @@ export default function RedactPage() {
 
     const startDrag = (e: React.MouseEvent, id: string, type: 'move' | 'resize', handle?: string) => {
         e.stopPropagation();
-        e.preventDefault(); // Prevent text selection
+        e.preventDefault();
         const r = redactAreas.find(area => area.id === id);
         if (!r) return;
-
         setSelectedRedactId(id);
-        setDragState({
-            type,
-            id,
-            startX: e.clientX,
-            startY: e.clientY,
-            initialRect: { ...r },
-            handle
+        setDragState({ type, id, pageIndex: r.pageIndex, startX: e.clientX, startY: e.clientY, initialRect: { ...r }, handle });
+    };
+
+    // Drawing handlers — each takes a pageIndex so they use the right canvas/overlay ref
+    const handleMouseDown = (e: React.MouseEvent, pageIndex: number) => {
+        if (dragState) return;
+        const overlay = overlayRefs.current.get(pageIndex);
+        const canvas = canvasRefs.current.get(pageIndex);
+        if (!overlay || !canvas) return;
+        const rect = overlay.getBoundingClientRect();
+        const cssToCanvasX = canvas.width / rect.width;
+        const cssToCanvasY = canvas.height / rect.height;
+        setSelectedRedactId(null);
+        setDrawState({
+            pageIndex,
+            start: { x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY },
+            current: { x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY },
         });
     };
 
-    // Drawing handlers — coordinates are stored in canvas-pixel space
-    const handleMouseDown = (e: React.MouseEvent) => {
-        // Only start drawing if we are NOT interacting with a box
-        if (dragState) return;
-
-        if (!overlayRef.current || !canvasRef.current) return;
-        const rect = overlayRef.current.getBoundingClientRect();
-        const canvas = canvasRef.current;
+    const handleMouseMove = (e: React.MouseEvent, pageIndex: number) => {
+        if (!drawState || drawState.pageIndex !== pageIndex) return;
+        const overlay = overlayRefs.current.get(pageIndex);
+        const canvas = canvasRefs.current.get(pageIndex);
+        if (!overlay || !canvas) return;
+        const rect = overlay.getBoundingClientRect();
         const cssToCanvasX = canvas.width / rect.width;
         const cssToCanvasY = canvas.height / rect.height;
-
-        // Deselect if clicking empty space
-        setSelectedRedactId(null);
-
-        setIsDrawing(true);
-        setDrawStart({ x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY });
-        setCurrentDraw({ x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY });
+        setDrawState(prev => prev ? {
+            ...prev,
+            current: { x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY },
+        } : null);
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDrawing || !overlayRef.current || !canvasRef.current) return;
-        const rect = overlayRef.current.getBoundingClientRect();
-        const canvas = canvasRef.current;
-        const cssToCanvasX = canvas.width / rect.width;
-        const cssToCanvasY = canvas.height / rect.height;
-        setCurrentDraw({ x: (e.clientX - rect.left) * cssToCanvasX, y: (e.clientY - rect.top) * cssToCanvasY });
-    };
-
-    const handleMouseUp = () => {
-        if (!isDrawing || !drawStart || !currentDraw) {
-            setIsDrawing(false);
+    const handleMouseUp = (pageIndex: number) => {
+        if (!drawState || drawState.pageIndex !== pageIndex) {
+            setDrawState(null);
             return;
         }
-
-        const x = Math.min(drawStart.x, currentDraw.x);
-        const y = Math.min(drawStart.y, currentDraw.y);
-        const w = Math.abs(currentDraw.x - drawStart.x);
-        const h = Math.abs(currentDraw.y - drawStart.y);
+        const { start, current } = drawState;
+        const x = Math.min(start.x, current.x);
+        const y = Math.min(start.y, current.y);
+        const w = Math.abs(current.x - start.x);
+        const h = Math.abs(current.y - start.y);
 
         if (w > 5 && h > 5) {
-            const canvas = canvasRef.current;
+            const canvas = canvasRefs.current.get(pageIndex);
             setRedactAreas(prev => [...prev, {
                 id: crypto.randomUUID(),
-                pageIndex: currentPage,
+                pageIndex,
                 x, y, width: w, height: h,
                 canvasWidth: canvas?.width ?? 1,
                 canvasHeight: canvas?.height ?? 1,
             }]);
         }
-
-        setIsDrawing(false);
-        setDrawStart(null);
-        setCurrentDraw(null);
+        setDrawState(null);
     };
 
-    const removeRedact = (id: string) => {
-        setRedactAreas(prev => prev.filter(r => r.id !== id));
-    };
-
-    const currentPageRedacts = redactAreas.filter(r => r.pageIndex === currentPage);
+    const removeRedact = (id: string) => setRedactAreas(prev => prev.filter(r => r.id !== id));
 
     const [searchText, setSearchText] = useState('');
     const [searchResults, setSearchResults] = useState<{
@@ -370,27 +385,14 @@ export default function RedactPage() {
                 const textContent = await page.getTextContent();
                 const viewport = page.getViewport({ scale: 1.5 });
 
-                // Build full page string and map indices to items
                 let fullText = '';
                 const itemMap: { index: number, startChar: number, endChar: number, item: any }[] = [];
 
                 for (const item of textContent.items as any[]) {
-                    // Normalize checking: insert space if items are far apart?
-                    // For now, simple concatenation. Ideally check relative coords for spaces.
-                    // Or usually PDF text items might have spaces at end.
                     const startChar = fullText.length;
                     const str = item.str;
                     fullText += str;
-                    itemMap.push({
-                        index: itemMap.length,
-                        startChar,
-                        endChar: startChar + str.length,
-                        item
-                    });
-                    // Heuristic: If x distance > char width, append space?
-                    // Let's rely on PDF content often having spaces or being separate words.
-                    // A safer "Find" often ignores whitespace differences or strictly matches chars.
-                    // Let's stick to strict char sequence for now, but maybe ignore case.
+                    itemMap.push({ index: itemMap.length, startChar, endChar: startChar + str.length, item });
                 }
 
                 const pageRects: any[] = [];
@@ -403,59 +405,35 @@ export default function RedactPage() {
 
                     const endIndex = foundIndex + query.length;
 
-                    // Find which items this match covers
                     const affectedItems = itemMap.filter(m =>
-                        (m.startChar <= foundIndex && m.endChar > foundIndex) || // Starts in this item
-                        (m.startChar >= foundIndex && m.endChar <= endIndex) || // Fully inside
-                        (m.startChar < endIndex && m.endChar >= endIndex)       // Ends in this item
+                        (m.startChar <= foundIndex && m.endChar > foundIndex) ||
+                        (m.startChar >= foundIndex && m.endChar <= endIndex) ||
+                        (m.startChar < endIndex && m.endChar >= endIndex)
                     );
 
                     for (const m of affectedItems) {
-                        // Calculate overlap
                         const matchStartInItem = Math.max(0, foundIndex - m.startChar);
                         const matchEndInItem = Math.min(m.item.str.length, endIndex - m.startChar);
-
-                        // Calculate sub-rect width based on char approximation
-                        // item.width is total width.
                         const charWidth = m.item.width / m.item.str.length;
-
-                        // Transform is [scaleX, skewY, skewX, scaleY, x, y]
-                        // PDF coordinates. x increases to right.
                         const tx = m.item.transform;
                         const itemX = tx[4];
                         const itemY = tx[5];
-                        // Height: approx from transform scaleY (tx[3]) or scaleX (tx[0]) if rotate
                         const itemH = Math.hypot(tx[2], tx[3]);
-
-                        // Calculate offset X and width of the substring
-                        // This assumes horizontal LTR text.
                         const subX = itemX + (matchStartInItem * charWidth);
                         const subW = (matchEndInItem - matchStartInItem) * charWidth;
-
                         const pdfRect = [subX, itemY, subX + subW, itemY + itemH];
                         const viewRect = viewport.convertToViewportRectangle(pdfRect);
-
-                        // Normalize: convertToViewportRectangle can return Y-swapped values
-                        // because PDF Y-axis (bottom-up) → viewport Y-axis (top-down)
                         const left = Math.min(viewRect[0], viewRect[2]);
                         const top = Math.min(viewRect[1], viewRect[3]);
                         const right = Math.max(viewRect[0], viewRect[2]);
                         const bottom = Math.max(viewRect[1], viewRect[3]);
-
-                        pageRects.push({
-                            x: left,
-                            y: top,
-                            width: right - left,
-                            height: bottom - top
-                        });
+                        pageRects.push({ x: left, y: top, width: right - left, height: bottom - top });
                     }
 
                     searchIndex = foundIndex + 1;
                 }
 
-                if (pageRects.length > 0) {
-                    results.push({ pageIndex: i, rects: pageRects });
-                }
+                if (pageRects.length > 0) results.push({ pageIndex: i, rects: pageRects });
             }
             setSearchResults(results);
         } catch (err) {
@@ -464,9 +442,6 @@ export default function RedactPage() {
             setIsSearching(false);
         }
     };
-
-
-
 
     const handleApplyAll = async () => {
         if (!file) return;
@@ -489,10 +464,7 @@ export default function RedactPage() {
                     newAreas.push({
                         id: crypto.randomUUID(),
                         pageIndex: res.pageIndex,
-                        x: r.x,
-                        y: r.y,
-                        width: r.width,
-                        height: r.height,
+                        x: r.x, y: r.y, width: r.width, height: r.height,
                         canvasWidth: viewport.width,
                         canvasHeight: viewport.height,
                     });
@@ -501,20 +473,9 @@ export default function RedactPage() {
             setRedactAreas(newAreas);
             setSearchResults([]);
             setShowSearchResults(false);
-        } catch (e) { console.error(e) }
+        } catch (e) { console.error(e); }
         finally { setIsProcessing(false); }
     };
-
-
-
-
-    const applySearchResults = () => {
-        // This function is superseded by handleApplyAll which is async.
-        // Kept as a no-op to avoid dead references.
-    };
-
-
-
 
     const handleSave = async (): Promise<{ blob: Blob; filename: string }> => {
         if (!file || redactAreas.length === 0) throw new Error('No file or no redactions');
@@ -523,17 +484,14 @@ export default function RedactPage() {
         try {
             const arrayBuffer = await file.file.arrayBuffer();
 
-            // Load MuPDF via singleton loader (official Artifex npm package, served from public/)
             const mupdf = await loadMuPDF();
 
-            // Also import pdfjs for coordinate conversion
             const pdfjs = await import('pdfjs-dist');
             if (!pdfjs.GlobalWorkerOptions.workerSrc) {
                 pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
             }
             const pdfjsDoc = await pdfjs.getDocument({ data: arrayBuffer.slice(0) }).promise;
 
-            // Create MuPDF document
             const docGeneric = mupdf.Document.openDocument(new Uint8Array(arrayBuffer), 'application/pdf');
             const doc = docGeneric.asPDF();
             if (!doc) throw new Error('Document is not a valid PDF');
@@ -545,14 +503,9 @@ export default function RedactPage() {
                 redactsByPage.set(r.pageIndex, list);
             });
 
-            // Iterate over pages that have redactions
             for (const [pageIndex, areas] of redactsByPage) {
                 const page = doc.loadPage(pageIndex) as any;
-
-                // Get PDF.js page to reconstruct the viewport that matches the user's view
                 const pdfjsPage = await pdfjsDoc.getPage(pageIndex + 1);
-
-                // Get unscaled viewport to determine base dimensions
                 const unscaledViewport = pdfjsPage.getViewport({ scale: 1.0 });
 
                 for (const rect of areas) {
@@ -573,25 +526,16 @@ export default function RedactPage() {
                     const bounds = page.getBounds();
                     const pageHeight = bounds[3] - bounds[1];
 
-                    const annotRect = [
-                        pdfX1,
-                        pageHeight - pdfY2,
-                        pdfX2,
-                        pageHeight - pdfY1,
-                    ];
+                    const annotRect = [pdfX1, pageHeight - pdfY2, pdfX2, pageHeight - pdfY1];
 
                     const annot = page.createAnnotation('Redact');
                     annot.setRect(annotRect);
                     annot.update();
                 }
 
-                // applyRedactions args: blackBoxes, imageMethod, lineArtMethod, textMethod
-                // 2=none (remove images entirely), 1=none (remove line art), 0=none (remove text)
                 page.applyRedactions(true, 2, 1, 0);
             }
 
-            // Apply metadata via MuPDF before saving
-            // Keys follow the 'info:Field' convention; 'xml' clears the XMP metadata stream
             if (stripMetadata) {
                 const STRIP_KEYS = [
                     'info:Title', 'info:Author', 'info:Subject', 'info:Keywords',
@@ -600,10 +544,8 @@ export default function RedactPage() {
                 for (const key of STRIP_KEYS) {
                     try { docGeneric.setMetaData(key, ''); } catch { /* field may not exist */ }
                 }
-                // Clear XMP metadata stream
                 try { docGeneric.setMetaData('xml', ''); } catch { /* may not be present */ }
             } else {
-                // Apply any user-edited metadata fields
                 const META_MAP: [keyof Metadata, string][] = [
                     ['title', 'info:Title'], ['author', 'info:Author'],
                     ['subject', 'info:Subject'], ['keywords', 'info:Keywords'],
@@ -614,17 +556,12 @@ export default function RedactPage() {
                 }
             }
 
-            // Save with full garbage collection + stream sanitization
-            // garbage=deduplicate: removes all unreferenced objects (eliminates revision history)
-            // clean: rewrites all content streams (removes hidden operators, old data)
-            // sanitize: validates/sanitizes PDF operators (prevents stream-level data leaks)
-            // This ensures NO redacted content remains anywhere in the file byte stream
             const reducedBuffer = doc.saveToBuffer('garbage=deduplicate,compress,clean,sanitize');
             const bytes = new Uint8Array(reducedBuffer.asUint8Array());
             docGeneric.destroy();
 
             const blob = new Blob([bytes], { type: 'application/pdf' });
-            return { blob, filename: file.name.replace('.pdf', '_redacted.pdf') };
+            return { blob, filename: sanitized };
         } catch (err) {
             console.error('Failed to redact:', err);
             alert('Failed to redact PDF. Please check console for details.');
@@ -646,6 +583,8 @@ export default function RedactPage() {
             onSave={file && redactAreas.length > 0 ? handleSave : undefined}
             saveDisabled={!file || redactAreas.length === 0 || isProcessing}
             saveLabel="Apply Redactions"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}
@@ -683,7 +622,6 @@ export default function RedactPage() {
                             </button>
                         </div>
 
-                        {/* Search Results Summary */}
                         {showSearchResults && (searchResults.length > 0 || isSearching) && (
                             <div className="mb-4 space-y-2">
                                 <div className="text-xs text-zinc-400 flex justify-between items-center">
@@ -764,7 +702,6 @@ export default function RedactPage() {
 
                         {metaExpanded && (
                             <div className="space-y-3">
-                                {/* Strip All toggle */}
                                 <div className="flex items-center justify-between p-2.5 bg-zinc-800/60 rounded-lg border border-zinc-700/50">
                                     <div>
                                         <p className="text-xs font-medium text-zinc-200">Strip All Metadata</p>
@@ -778,7 +715,6 @@ export default function RedactPage() {
                                     </button>
                                 </div>
 
-                                {/* Individual fields */}
                                 {!stripMetadata && (() => {
                                     const inputCls = "w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-100 focus:outline-none focus:border-[#3A76F0]";
                                     const fields: { key: keyof Metadata; label: string; type?: string }[] = [
@@ -844,6 +780,9 @@ export default function RedactPage() {
                                 <h3 className="font-medium text-zinc-100">{file.name}</h3>
                                 <p className="text-sm text-zinc-500">
                                     {formatFileSize(file.size)} • {file.pageCount} pages
+                                    {file.pageCount > 1 && (
+                                        <span className="ml-2 text-zinc-600">— viewing page {currentPage + 1}</span>
+                                    )}
                                 </p>
                             </div>
                         </div>
@@ -852,171 +791,151 @@ export default function RedactPage() {
                         </button>
                     </div>
 
-                    {/* Page navigation */}
-                    <div className="flex items-center justify-center gap-4">
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                            disabled={currentPage === 0}
-                            className="p-2 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-30"
-                        >
-                            <ChevronLeft className="w-5 h-5 text-zinc-400" />
-                        </button>
-                        <span className="text-sm text-zinc-400">
-                            Page {currentPage + 1} of {file.pageCount}
-                        </span>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(file.pageCount - 1, p + 1))}
-                            disabled={currentPage === file.pageCount - 1}
-                            className="p-2 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-30"
-                        >
-                            <ChevronRight className="w-5 h-5 text-zinc-400" />
-                        </button>
-                    </div>
+                    {/* All pages stacked — scroll to navigate */}
+                    <div className="space-y-6">
+                        {Array.from({ length: file.pageCount }, (_, i) => {
+                            const pageRedacts = redactAreas.filter(r => r.pageIndex === i);
+                            const pageSearchResults = showSearchResults
+                                ? searchResults.find(r => r.pageIndex === i)?.rects ?? []
+                                : [];
 
-                    {/* Canvas + redaction overlay */}
-                    <div className="relative mx-auto inline-block bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
-                        <canvas ref={canvasRef} className={`block max-w-full h-auto transition-opacity duration-300 ${pageRendered ? 'opacity-100' : 'opacity-0'}`} />
-                        {!pageRendered && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center min-h-[300px]">
-                                <Logo isProcessing className="w-12 h-12 text-[#3A76F0] mb-3" />
-                                <p className="text-xs text-zinc-500">Rendering page…</p>
-                            </div>
-                        )}
-                        <div
-                            ref={overlayRef}
-                            className="absolute inset-0 cursor-crosshair"
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                            onMouseLeave={handleMouseUp}
-                        >
-                            {/* Search Results Overlay — coords are in canvas-pixel space, convert to CSS */}
-                            {showSearchResults && (() => {
-                                const canvas = canvasRef.current;
-                                const overlayBounds = overlayRef.current?.getBoundingClientRect();
-                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
-                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
-                                return searchResults.find(r => r.pageIndex === currentPage)?.rects.map((r, i) => (
-                                    <div
-                                        key={`search-${i}`}
-                                        className="absolute border-2 border-yellow-500/50 bg-yellow-500/20"
-                                        style={{
-                                            left: r.x * canvasToCssX,
-                                            top: r.y * canvasToCssY,
-                                            width: r.width * canvasToCssX,
-                                            height: r.height * canvasToCssY,
-                                            pointerEvents: 'none'
-                                        }}
-                                    />
-                                ));
-                            })()}
+                            return (
+                                <div
+                                    key={i}
+                                    ref={el => { if (el) pageContainerRefs.current.set(i, el); else pageContainerRefs.current.delete(i); }}
+                                    data-page-idx={i}
+                                >
+                                    {/* Page label */}
+                                    {file.pageCount > 1 && (
+                                        <p className="text-xs text-zinc-500 text-center mb-2 select-none">
+                                            Page {i + 1} of {file.pageCount}
+                                        </p>
+                                    )}
 
-                            {/* Existing redact areas for current page — canvas coords converted to CSS */}
-                            {(() => {
-                                const canvas = canvasRef.current;
-                                const overlayBounds = overlayRef.current?.getBoundingClientRect();
-                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
-                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
-                                return currentPageRedacts.map((r, i) => {
-                                    const isSelected = selectedRedactId === r.id;
-                                    const isHovered = hoveredRedactId === r.id;
-                                    const isActive = isSelected || isHovered;
+                                    {/* Canvas + overlay */}
+                                    <div className="relative mx-auto inline-block bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">
+                                        <canvas
+                                            ref={el => { if (el) canvasRefs.current.set(i, el); else canvasRefs.current.delete(i); }}
+                                            className={`block max-w-full h-auto transition-opacity duration-300 ${renderedPages.has(i) ? 'opacity-100' : 'opacity-0'}`}
+                                        />
+                                        {!renderedPages.has(i) && (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center min-h-[300px]">
+                                                <Logo isProcessing className="w-12 h-12 text-[#3A76F0] mb-3" />
+                                                <p className="text-xs text-zinc-500">Rendering page {i + 1}…</p>
+                                            </div>
+                                        )}
 
-                                    // Find global index for label
-                                    const globalIndex = redactAreas.findIndex(area => area.id === r.id) + 1;
-
-                                    // Convert canvas-pixel coords to CSS for display
-                                    const cssX = r.x * canvasToCssX;
-                                    const cssY = r.y * canvasToCssY;
-                                    const cssW = r.width * canvasToCssX;
-                                    const cssH = r.height * canvasToCssY;
-
-                                    return (
                                         <div
-                                            key={r.id}
-                                            className={`absolute group select-none ${isSelected ? 'z-20' : 'z-10'}`}
-                                            style={{
-                                                left: cssX,
-                                                top: cssY,
-                                                width: cssW,
-                                                height: cssH,
-                                                touchAction: 'none'
-                                            }}
-                                            onMouseDown={(e) => startDrag(e, r.id, 'move')}
-                                            onMouseEnter={() => setHoveredRedactId(r.id)}
-                                            onMouseLeave={() => setHoveredRedactId(null)}
+                                            ref={el => { if (el) overlayRefs.current.set(i, el); else overlayRefs.current.delete(i); }}
+                                            className="absolute inset-0 cursor-crosshair"
+                                            onMouseDown={e => handleMouseDown(e, i)}
+                                            onMouseMove={e => handleMouseMove(e, i)}
+                                            onMouseUp={() => handleMouseUp(i)}
+                                            onMouseLeave={() => handleMouseUp(i)}
                                         >
-                                            {/* Main Box */}
-                                            <div
-                                                className={`w-full h-full transition-all duration-200 bg-black ${isActive ? 'ring-2 ring-[#3A76F0] shadow-lg' : ''}`}
-                                                style={{ opacity: isActive ? 0.7 : 0.85 }}
-                                            />
+                                            {/* Search result highlights */}
+                                            {(() => {
+                                                const canvas = canvasRefs.current.get(i);
+                                                const overlay = overlayRefs.current.get(i);
+                                                const overlayBounds = overlay?.getBoundingClientRect();
+                                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
+                                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
+                                                return pageSearchResults.map((r, idx) => (
+                                                    <div
+                                                        key={`search-${idx}`}
+                                                        className="absolute border-2 border-yellow-500/50 bg-yellow-500/20"
+                                                        style={{
+                                                            left: r.x * canvasToCssX, top: r.y * canvasToCssY,
+                                                            width: r.width * canvasToCssX, height: r.height * canvasToCssY,
+                                                            pointerEvents: 'none',
+                                                        }}
+                                                    />
+                                                ));
+                                            })()}
 
-                                            {/* Label Tag */}
-                                            {isActive && (
-                                                <div className="absolute -top-6 left-0 bg-[#3A76F0] text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none">
-                                                    Area {globalIndex}
-                                                </div>
-                                            )}
+                                            {/* Existing redact areas for this page */}
+                                            {(() => {
+                                                const canvas = canvasRefs.current.get(i);
+                                                const overlay = overlayRefs.current.get(i);
+                                                const overlayBounds = overlay?.getBoundingClientRect();
+                                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
+                                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
+                                                return pageRedacts.map(r => {
+                                                    const isSelected = selectedRedactId === r.id;
+                                                    const isHovered = hoveredRedactId === r.id;
+                                                    const isActive = isSelected || isHovered;
+                                                    const globalIndex = redactAreas.findIndex(area => area.id === r.id) + 1;
+                                                    const cssX = r.x * canvasToCssX;
+                                                    const cssY = r.y * canvasToCssY;
+                                                    const cssW = r.width * canvasToCssX;
+                                                    const cssH = r.height * canvasToCssY;
 
-                                            {/* Delete Button */}
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); removeRedact(r.id); }}
-                                                className={`absolute -top-3 -right-3 w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-md transition-all z-30 ${isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
-                                                    }`}
-                                                title="Delete Redaction"
-                                            >
-                                                <X className="w-3 h-3 text-white" />
-                                            </button>
+                                                    return (
+                                                        <div
+                                                            key={r.id}
+                                                            className={`absolute group select-none ${isSelected ? 'z-20' : 'z-10'}`}
+                                                            style={{ left: cssX, top: cssY, width: cssW, height: cssH, touchAction: 'none' }}
+                                                            onMouseDown={e => startDrag(e, r.id, 'move')}
+                                                            onMouseEnter={() => setHoveredRedactId(r.id)}
+                                                            onMouseLeave={() => setHoveredRedactId(null)}
+                                                        >
+                                                            <div
+                                                                className={`w-full h-full transition-all duration-200 bg-black ${isActive ? 'ring-2 ring-[#3A76F0] shadow-lg' : ''}`}
+                                                                style={{ opacity: isActive ? 0.7 : 0.85 }}
+                                                            />
+                                                            {isActive && (
+                                                                <div className="absolute -top-6 left-0 bg-[#3A76F0] text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none">
+                                                                    Area {globalIndex}
+                                                                </div>
+                                                            )}
+                                                            <button
+                                                                onClick={e => { e.stopPropagation(); removeRedact(r.id); }}
+                                                                className={`absolute -top-3 -right-3 w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-md transition-all z-30 ${isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'}`}
+                                                            >
+                                                                <X className="w-3 h-3 text-white" />
+                                                            </button>
+                                                            {isSelected && (
+                                                                <>
+                                                                    <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-nw-resize z-30" onMouseDown={e => startDrag(e, r.id, 'resize', 'nw')} />
+                                                                    <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-ne-resize z-30" onMouseDown={e => startDrag(e, r.id, 'resize', 'ne')} />
+                                                                    <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-sw-resize z-30" onMouseDown={e => startDrag(e, r.id, 'resize', 'sw')} />
+                                                                    <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-se-resize z-30" onMouseDown={e => startDrag(e, r.id, 'resize', 'se')} />
+                                                                    <div className="absolute top-1/2 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-w-resize z-30 transform -translate-y-1/2" onMouseDown={e => startDrag(e, r.id, 'resize', 'w')} />
+                                                                    <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-e-resize z-30 transform -translate-y-1/2" onMouseDown={e => startDrag(e, r.id, 'resize', 'e')} />
+                                                                    <div className="absolute -top-1.5 left-1/2 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-n-resize z-30 transform -translate-x-1/2" onMouseDown={e => startDrag(e, r.id, 'resize', 'n')} />
+                                                                    <div className="absolute -bottom-1.5 left-1/2 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-s-resize z-30 transform -translate-x-1/2" onMouseDown={e => startDrag(e, r.id, 'resize', 's')} />
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
 
-                                            {/* Resize Handles - Only when selected */}
-                                            {isSelected && (
-                                                <>
-                                                    <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-nw-resize z-30"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'nw')} />
-                                                    <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-ne-resize z-30"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'ne')} />
-                                                    <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-sw-resize z-30"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'sw')} />
-                                                    <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-se-resize z-30"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'se')} />
-                                                    <div className="absolute top-1/2 -left-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-w-resize z-30 transform -translate-y-1/2"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'w')} />
-                                                    <div className="absolute top-1/2 -right-1.5 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-e-resize z-30 transform -translate-y-1/2"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'e')} />
-                                                    <div className="absolute -top-1.5 left-1/2 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-n-resize z-30 transform -translate-x-1/2"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 'n')} />
-                                                    <div className="absolute -bottom-1.5 left-1/2 w-3 h-3 bg-white border-2 border-[#3A76F0] rounded-full cursor-s-resize z-30 transform -translate-x-1/2"
-                                                        onMouseDown={(e) => startDrag(e, r.id, 'resize', 's')} />
-                                                </>
-                                            )}
+                                            {/* Draw preview — only on the page being drawn */}
+                                            {drawState?.pageIndex === i && (() => {
+                                                const canvas = canvasRefs.current.get(i);
+                                                const overlay = overlayRefs.current.get(i);
+                                                const overlayBounds = overlay?.getBoundingClientRect();
+                                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
+                                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
+                                                return (
+                                                    <div
+                                                        className="absolute border-2 border-dashed border-red-500 bg-black"
+                                                        style={{
+                                                            left: Math.min(drawState.start.x, drawState.current.x) * canvasToCssX,
+                                                            top: Math.min(drawState.start.y, drawState.current.y) * canvasToCssY,
+                                                            width: Math.abs(drawState.current.x - drawState.start.x) * canvasToCssX,
+                                                            height: Math.abs(drawState.current.y - drawState.start.y) * canvasToCssY,
+                                                            opacity: 0.4,
+                                                        }}
+                                                    />
+                                                );
+                                            })()}
                                         </div>
-                                    );
-                                });
-                            })()}
-
-                            {/* Currently drawing rect — canvas coords converted to CSS */}
-                            {isDrawing && drawStart && currentDraw && (() => {
-                                const canvas = canvasRef.current;
-                                const overlayBounds = overlayRef.current?.getBoundingClientRect();
-                                const canvasToCssX = canvas && overlayBounds ? overlayBounds.width / canvas.width : 1;
-                                const canvasToCssY = canvas && overlayBounds ? overlayBounds.height / canvas.height : 1;
-                                return (
-                                    <div
-                                        className="absolute border-2 border-dashed border-red-500 bg-black"
-                                        style={{
-                                            left: Math.min(drawStart.x, currentDraw.x) * canvasToCssX,
-                                            top: Math.min(drawStart.y, currentDraw.y) * canvasToCssY,
-                                            width: Math.abs(currentDraw.x - drawStart.x) * canvasToCssX,
-                                            height: Math.abs(currentDraw.y - drawStart.y) * canvasToCssY,
-                                            opacity: 0.4,
-                                        }}
-                                    />
-                                );
-                            })()}
-                        </div>
-
-
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </motion.div>
             )}

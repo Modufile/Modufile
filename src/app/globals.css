@@ -38,52 +38,52 @@
  */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
   /* Brand Colors */
-  --brand-bg: #FFFFFF;
+  --brand-bg: #09090B;
   --brand-primary: #3A76F0;
-  --brand-primary-hover: #2563EB;
-  --brand-primary-active: #1D4ED8;
+  --brand-primary-hover: #60A5FA;
+  --brand-primary-active: #3B82F6;
   --brand-accent: #6D4AFF;
-  --brand-accent-hover: #5B21B6;
-  --brand-focus-ring: rgba(58, 118, 240, 0.3);
+  --brand-accent-hover: #7C3AED;
+  --brand-focus-ring: rgba(58, 118, 240, 0.5);
 
   /* Background */
-  --background-app: #FCFCFD;
-  --background-surface: #FFFFFF;
-  --background-surface-hover: #F4F4F5;
-  --background-raised: #FFFFFF;
-  --background-overlay: rgba(0, 0, 0, 0.4);
-  --background-inset: #F4F4F5;
+  --background-app: #09090B;
+  --background-surface: #18181B;
+  --background-surface-hover: #27272A;
+  --background-raised: #27272A;
+  --background-overlay: rgba(0, 0, 0, 0.6);
+  --background-inset: #09090B;
 
   /* Border */
-  --border-default: #E4E4E7;
-  --border-subtle: #F4F4F5;
-  --border-strong: #D4D4D8;
-  --border-interactive: #A1A1AA;
+  --border-default: #27272A;
+  --border-subtle: #18181B;
+  --border-strong: #3F3F46;
+  --border-interactive: #52525B;
   --border-focus: #3A76F0;
 
   /* Text */
-  --text-primary: #18181B;
-  --text-secondary: #71717A;
-  --text-tertiary: #A1A1AA;
+  --text-primary: #F4F4F5;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #52525B;
   --text-inverse: #FFFFFF;
-  --text-link: #3A76F0;
+  --text-link: #60A5FA;
 
   /* Semantic */
-  --success-bg: #ECFDF5;
-  --success-text: #047857;
-  --success-border: #A7F3D0;
-  --warning-bg: #FFFBEB;
-  --warning-text: #B45309;
-  --warning-border: #FDE68A;
-  --error-bg: #FEF2F2;
-  --error-text: #B91C1C;
-  --error-border: #FECACA;
-  --info-bg: #EFF6FF;
-  --info-text: #1D4ED8;
-  --info-border: #BFDBFE;
+  --success-bg: #064E3B;
+  --success-text: #34D399;
+  --success-border: #059669;
+  --warning-bg: #451A03;
+  --warning-text: #FCD34D;
+  --warning-border: #D97706;
+  --error-bg: #450A0A;
+  --error-text: #F87171;
+  --error-border: #DC2626;
+  --info-bg: #172554;
+  --info-text: #60A5FA;
+  --info-border: #2563EB;
 
   /* File Status */
   --status-processing: #3A76F0;
@@ -100,78 +100,21 @@
   --file-unknown: #71717A;
 }
 
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand-bg: #09090B;
-    --brand-primary-hover: #60A5FA;
-    --brand-primary-active: #3B82F6;
-    --brand-accent-hover: #7C3AED;
-    --brand-focus-ring: rgba(58, 118, 240, 0.5);
-
-    --background-app: #09090B;
-    --background-surface: #18181B;
-    --background-surface-hover: #27272A;
-    --background-raised: #27272A;
-    --background-overlay: rgba(0, 0, 0, 0.6);
-    --background-inset: #09090B;
-
-    --border-default: #27272A;
-    --border-subtle: #18181B;
-    --border-strong: #3F3F46;
-    --border-interactive: #52525B;
-
-    --text-primary: #F4F4F5;
-    --text-secondary: #A1A1AA;
-    --text-tertiary: #52525B;
-    --text-link: #60A5FA;
-
-    --success-bg: #064E3B;
-    --success-text: #34D399;
-    --success-border: #059669;
-    --warning-bg: #451A03;
-    --warning-text: #FCD34D;
-    --warning-border: #D97706;
-    --error-bg: #450A0A;
-    --error-text: #F87171;
-    --error-border: #DC2626;
-    --info-bg: #172554;
-    --info-text: #60A5FA;
-    --info-border: #2563EB;
-  }
-}
-
-/* Base Styles — hardcoded fallbacks for older browsers that cannot resolve CSS variables */
+/* Base Styles — dark mode only, no media query dependency */
 html {
-  background-color: #FCFCFD;
-  color: #18181B;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    background-color: #09090B;
-    color: #F4F4F5;
-  }
+  background-color: #09090B;
+  color: #F4F4F5;
 }
 
 body {
-  background: #FCFCFD;
-  background: var(--background-app, #FCFCFD);
-  color: #18181B;
-  color: var(--text-primary, #18181B);
+  background: #09090B;
+  background: var(--background-app, #09090B);
+  color: #F4F4F5;
+  color: var(--text-primary, #F4F4F5);
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-family: var(--font-sans, 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #09090B;
-    background: var(--background-app, #09090B);
-    color: #F4F4F5;
-    color: var(--text-primary, #F4F4F5);
-  }
 }
 
 /* Focus Ring */

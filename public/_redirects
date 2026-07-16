@@ -1,0 +1,5 @@
+# Cloudflare Pages redirects (production)
+/open-source/ /thanks/ 301
+/open-source /thanks/ 301
+/licenses/ /thanks/ 301
+/licenses /thanks/ 301

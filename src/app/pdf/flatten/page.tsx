@@ -6,6 +6,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -23,6 +24,9 @@ export default function PDFFlattenPage() {
     const [file, setFile] = useState<PDFFile | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    const inputName = file ? file.name : 'flattened.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_flattened');
 
     const handleFileAdded = useCallback(async (newFiles: File[]) => {
         const uploadedFile = newFiles[0];
@@ -84,7 +88,7 @@ export default function PDFFlattenPage() {
 
             const bytes = await pdfDoc.save();
             const blob = new Blob([bytes as any], { type: 'application/pdf' });
-            return { blob, filename: `flattened_${file.name}` };
+            return { blob, filename: sanitized };
 
         } finally {
             setIsProcessing(false);
@@ -103,6 +107,8 @@ export default function PDFFlattenPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing}
             saveLabel="Flatten Form Fields"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

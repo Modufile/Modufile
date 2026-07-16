@@ -1043,10 +1043,7 @@ export default function PDFEditorPage() {
         if (!file) return;
         setIsProcessing(true);
         try {
-            // Auto-apply any redactions on current page before saving
-            if (pageAnnotations.some(a => a.type === 'Redact')) {
-                await mupdf.applyRedactions(currentPage);
-            }
+            // opSave in the worker applies redactions on all pages automatically
             const result = await mupdf.save();
             const safeBytes = new Uint8Array(result.buffer);
             const blob = new Blob([safeBytes], { type: 'application/pdf' });
@@ -1060,7 +1057,7 @@ export default function PDFEditorPage() {
         } finally {
             setIsProcessing(false);
         }
-    }, [mupdf, sanitized, file, currentPage, pageAnnotations]);
+    }, [mupdf, sanitized, file]);
 
     const handleCloseToast = useCallback(() => {
         if (toastInfo?.blobUrl) URL.revokeObjectURL(toastInfo.blobUrl);

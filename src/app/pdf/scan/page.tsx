@@ -4,11 +4,10 @@ import { useState, useCallback, useRef } from 'react';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
-import { FloatingActionBar } from '@/components/tools/FloatingActionBar';
 import { FileProcessingOverlay } from '@/components/ui';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { Camera, Image, X, Sun, Contrast, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { downloadBlob } from '@/lib/core/download';
 import { PDFDocument } from 'pdf-lib';
 
 interface ScannedImage {
@@ -24,6 +23,8 @@ export default function ScanToPdfPage() {
     const [grayscale, setGrayscale] = useState(false);
     const [contrast, setContrast] = useState(1.2);
     const fileRef = useRef<HTMLInputElement>(null);
+
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename('scanned-document.pdf', '');
 
     const handleFiles = useCallback(async (files: FileList | File[]) => {
         const newImages: ScannedImage[] = [];
@@ -58,8 +59,8 @@ export default function ScanToPdfPage() {
         });
     };
 
-    const handleCreatePdf = useCallback(async () => {
-        if (images.length === 0) return;
+    const handleSave = useCallback(async (): Promise<{ blob: Blob; filename: string }> => {
+        if (images.length === 0) throw new Error('No images');
         setIsProcessing(true);
         try {
             const pdfDoc = await PDFDocument.create();
@@ -71,14 +72,15 @@ export default function ScanToPdfPage() {
             }
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes.slice()], { type: 'application/pdf' });
-            downloadBlob(blob, 'scanned-document.pdf');
+            return { blob, filename: sanitized };
         } catch (err) {
             console.error('Scan to PDF failed:', err);
+            throw err;
         } finally {
             setIsProcessing(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [images, grayscale, enhance, contrast]);
+    }, [images, grayscale, enhance, contrast, sanitized]);
 
     const content = toolContent['pdf-scan'];
 
@@ -88,6 +90,11 @@ export default function ScanToPdfPage() {
             description="Capture images from your camera or gallery and create a PDF document"
             parentCategory="PDF Tools"
             parentHref="/pdf"
+            onSave={images.length > 0 ? handleSave : undefined}
+            saveDisabled={images.length === 0 || isProcessing}
+            saveLabel="Create PDF"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={[]}
@@ -165,12 +172,6 @@ export default function ScanToPdfPage() {
                 {isProcessing && <FileProcessingOverlay message="Creating PDF from scans…" />}
             </div>
 
-            <FloatingActionBar
-                isVisible={images.length > 0 && !isProcessing}
-                isProcessing={isProcessing}
-                onAction={handleCreatePdf}
-                actionLabel={<><Camera className="w-4 h-4" /> Create PDF ({images.length} page{images.length > 1 ? 's' : ''})</>}
-            />
         </ToolPageLayout>
     );
 }

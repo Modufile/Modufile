@@ -7,10 +7,75 @@
  * Follows the design spec: dashed border, pulse on hover, trust badge.
  */
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+/** Map MIME types/patterns to short human-readable labels, deduplicating by category. */
+function describeAcceptedTypes(types: string[]): string {
+    const labels = new Set<string>();
+
+    for (const t of types) {
+        // Exact MIME → friendly name
+        const mapped = MIME_LABELS[t];
+        if (mapped) { labels.add(mapped); continue; }
+
+        // Wildcard category (image/*, video/*, audio/*)
+        const wildcard = CATEGORY_LABELS[t];
+        if (wildcard) { labels.add(wildcard); continue; }
+
+        // Specific subtypes that weren't in the map — derive from category
+        const [cat] = t.split('/');
+        const catLabel = CATEGORY_LABELS[`${cat}/*`];
+        if (catLabel) { labels.add(catLabel); continue; }
+
+        // Fallback: use the subtype
+        const sub = t.split('/')[1];
+        if (sub) labels.add(sub.toUpperCase());
+    }
+
+    if (labels.size === 0) return 'Drag and drop files here';
+
+    const arr = [...labels];
+    if (arr.length <= 3) return `Supports ${arr.join(', ')}`;
+    return `Supports ${arr.slice(0, 3).join(', ')}, and more`;
+}
+
+const MIME_LABELS: Record<string, string> = {
+    'application/pdf': 'PDF',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
+    'application/msword': 'Word',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
+    'application/vnd.ms-excel': 'Excel',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint',
+    'text/csv': 'CSV',
+    'text/plain': 'Text',
+    'text/html': 'HTML',
+    'text/markdown': 'Markdown',
+    'image/jpeg': 'JPG',
+    'image/png': 'PNG',
+    'image/webp': 'WebP',
+    'image/avif': 'AVIF',
+    'image/heic': 'HEIC',
+    'image/heif': 'HEIC',
+    'image/tiff': 'TIFF',
+    'image/bmp': 'BMP',
+    'image/gif': 'GIF',
+    'image/svg+xml': 'SVG',
+    'video/mp4': 'MP4',
+    'video/webm': 'WebM',
+    'video/quicktime': 'MOV',
+    'audio/mpeg': 'MP3',
+    'audio/wav': 'WAV',
+    'audio/ogg': 'OGG',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+    'image/*': 'Images',
+    'video/*': 'Videos',
+    'audio/*': 'Audio',
+};
 
 interface DropzoneProps {
     onFilesAdded: (files: File[]) => void;
@@ -107,6 +172,8 @@ export function Dropzone({
         [onFilesAdded, maxFiles]
     );
 
+    const supportedLabel = useMemo(() => describeAcceptedTypes(acceptedTypes), [acceptedTypes]);
+
     // Calculate path for tether
     // Control point creates a nice curve
     const midX = (mousePos.x + dropzoneCenter.x) / 2;
@@ -202,7 +269,7 @@ export function Dropzone({
                 </h3>
 
                 <p className="text-sm text-zinc-500 mb-4">
-                    or click to browse. Supports PDFs, PNG, JPG, DOCX, and more.
+                    or click to browse. {supportedLabel}.
                 </p>
 
                 {/* Trust Badge */}

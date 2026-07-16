@@ -6,6 +6,7 @@ import { useFileStore } from '@/stores/fileStore';
 import { ToolPageLayout } from '@/components/tools/ToolPageLayout';
 import { ImportedFilesPanel } from '@/components/tools/ImportedFilesPanel';
 import { toolContent } from '@/data/tool-faqs';
+import { useOutputFilename } from '@/hooks/useOutputFilename';
 import { FileText, X, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatFileSize } from '@/lib/core/format';
@@ -24,6 +25,9 @@ export default function CompressPdfPage() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<{ blob: Blob; savings: number } | null>(null);
+
+    const inputName = file ? file.name : 'compressed.pdf';
+    const { outputFilename, setOutputFilename, sanitized } = useOutputFilename(inputName, '_compressed');
 
     const { files: storedFiles, source, setFiles: setStoredFiles } = useFileStore();
 
@@ -73,9 +77,7 @@ export default function CompressPdfPage() {
             const savings = Math.round((1 - compressed.size / file.size) * 100);
             setResult({ blob: compressed, savings: Math.max(0, savings) });
 
-            const base = file.name.replace(/\.pdf$/i, '');
-            const filename = `${base}-compressed.pdf`;
-            return { blob: compressed, filename };
+            return { blob: compressed, filename: sanitized };
         } finally {
             setIsProcessing(false);
         }
@@ -92,6 +94,8 @@ export default function CompressPdfPage() {
             onSave={file ? handleSave : undefined}
             saveDisabled={!file || isProcessing}
             saveLabel="Compress PDF"
+            outputFilename={outputFilename}
+            onFilenameChange={setOutputFilename}
             importedFilesPanel={
                 <ImportedFilesPanel
                     files={file ? [{ name: file.name, size: file.size, pageCount: (file as any).pageCount }] : []}

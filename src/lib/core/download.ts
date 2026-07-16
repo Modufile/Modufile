@@ -17,7 +17,7 @@ export const downloadBlob = (blob: Blob, filename: string) => {
 /**
  * Download multiple files as a ZIP archive using fflate (lightweight, fast)
  */
-export const downloadMultipleAsZip = async (files: Array<{ name: string; blob: Blob }>, zipName: string) => {
+export const buildZipBlob = async (files: Array<{ name: string; blob: Blob }>): Promise<Blob> => {
     const zipData: Record<string, Uint8Array> = {};
 
     for (const file of files) {
@@ -26,6 +26,10 @@ export const downloadMultipleAsZip = async (files: Array<{ name: string; blob: B
     }
 
     const zipped = zipSync(zipData);
-    const blob = new Blob([zipped as BlobPart], { type: 'application/zip' });
+    return new Blob([zipped as BlobPart], { type: 'application/zip' });
+};
+
+export const downloadMultipleAsZip = async (files: Array<{ name: string; blob: Blob }>, zipName: string) => {
+    const blob = await buildZipBlob(files);
     downloadBlob(blob, `${zipName}.zip`);
 };
